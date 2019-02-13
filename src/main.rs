@@ -1,6 +1,8 @@
 mod gradient;
 mod gray_scott_model;
 mod utils;
+pub mod model_presets;
+pub mod gradient_presets;
 
 use ggez::{
     event::{self, Keycode, Mod, MouseButton},
@@ -12,25 +14,18 @@ use gray_scott_model::{ChemicalSpecies, ReactionDiffusionSystem};
 use image::{DynamicImage, GenericImageView, ImageBuffer, Rgba, RgbaImage};
 use std::{env, path};
 
-const WINDOW_HEIGHT: usize = 810;
+const WINDOW_HEIGHT: usize = 900;
 const WINDOW_WIDTH: usize = 1440;
 
-const MODEL_HEIGHT: usize = 180;
-const MODEL_WIDTH: usize = 320;
+const ASPECT_RATIO: f32 = WINDOW_WIDTH as f32 / WINDOW_HEIGHT as f32;
+
+const MODEL_HEIGHT: usize = 240;
+const MODEL_WIDTH: usize = (MODEL_HEIGHT as f32 * ASPECT_RATIO) as usize;
 
 const HEIGHT_RATIO: f32 = WINDOW_HEIGHT as f32 / MODEL_HEIGHT as f32;
 const WIDTH_RATIO: f32 = WINDOW_WIDTH as f32 / MODEL_WIDTH as f32;
 
-const MODEL_BRAIN_CORAL: (f32, f32) = (0.0545, 0.062);
-const MODEL_MITOSIS: (f32, f32) = (0.0367, 0.0649);
-const MODEL_FINGERPRINT: (f32, f32) = (0.0545, 0.062);
-const MODEL_U_SKATE_WORLD: (f32, f32) = (0.062, 0.061);
-const MODEL_RIPPLES: (f32, f32) = (0.018, 0.051);
-const MODEL_UNDULATING: (f32, f32) = (0.026, 0.051);
-const MODEL_WORMS: (f32, f32) = (0.078, 0.061);
-const MODEL_SOLITON_COLLAPSE: (f32, f32) = (0.022, 0.06);
-
-const CURRENT_MODEL: (f32, f32) = MODEL_SOLITON_COLLAPSE;
+const CURRENT_MODEL: (f32, f32) = model_presets::SOLITON_COLLAPSE;
 
 struct MainState {
     frames: usize,
@@ -41,13 +36,6 @@ struct MainState {
 
 impl MainState {
     fn new(_ctx: &mut Context) -> GameResult<MainState> {
-        let mut gradient = ColorGradient::from_colors([0, 0, 0], [255, 255, 255]);
-        gradient.add_color_at_t(0.80, [0, 20, 230]);
-        gradient.add_color_at_t(0.63, [200, 0, 255]);
-        gradient.add_color_at_t(0.60, [255, 0, 0]);
-        gradient.add_color_at_t(0.53, [0, 255, 255]);
-        gradient.add_color_at_t(0.40, [0, 0, 0]);
-
         let s = MainState {
             frames: 0,
             reaction_diffusion_system: ReactionDiffusionSystem::new(
@@ -59,7 +47,7 @@ impl MainState {
                 0.5,
             ),
             fast_forward: false,
-            gradient,
+            gradient: gradient_presets::new_pink_and_blue(),
         };
 
         Ok(s)

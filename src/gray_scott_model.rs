@@ -3,7 +3,9 @@ use rayon::prelude::*;
 use std::iter;
 
 // This is a bad name, Come up with a name that describes the bizarre effects this has.
-const SPEED: f32 = 0.1;
+// This needs to be within a range governed by the size of the sim. If it gets too high,
+// the model shits the bed.
+const SPEED: f32 = 0.05;
 
 pub struct ReactionDiffusionSystem {
     pub width: usize,
@@ -98,8 +100,8 @@ impl ReactionDiffusionSystem {
                         + (u * v * v)
                         - (self.k + self.f) * v;
 
-                    acc.1.push(clamp_f32((v + delta_v * delta_t * SPEED), -1.0, 1.0));
-                    acc.0.push(clamp_f32((u + delta_u * delta_t * SPEED), -1.0, 1.0));
+                    acc.1.push(clamp_f32(v + delta_v * delta_t * SPEED, -1.0, 1.0));
+                    acc.0.push(clamp_f32(u + delta_u * delta_t * SPEED, -1.0, 1.0));
                     acc
                 },
             )
