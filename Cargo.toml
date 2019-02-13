@@ -10,3 +10,4 @@ cargo-resource-root = []
 [dependencies]
 ggez = "^0.4"
 gfx = "^0.17"
+image = "^0.21"

@@ -1,17 +1,19 @@
-use ggez::event;
-use ggez::graphics;
-use ggez::graphics::Point2;
-use ggez::{Context, GameResult};
-use std::env;
-use std::path;
-
 mod gray_scott_model;
 
-use gray_scott_model::ChemicalSpecies;
-use gray_scott_model::ReactionDiffusionSystem;
+use ggez::{event, graphics, graphics::Point2, Context, GameResult};
+use gray_scott_model::{ChemicalSpecies, ReactionDiffusionSystem};
+use image::{DynamicImage, FilterType, ImageBuffer, Rgba, RgbaImage};
+use std::{env, path};
+use ggez::event::MouseButton;
 
-const WINDOW_HEIGHT: usize = 200;
-const WINDOW_WIDTH: usize = 200;
+const WINDOW_HEIGHT: usize = 810;
+const WINDOW_WIDTH: usize = 1440;
+
+const MODEL_HEIGHT: usize = 81;
+const MODEL_WIDTH: usize = 144;
+
+const HEIGHT_RATIO: f32 = WINDOW_HEIGHT as f32 / MODEL_HEIGHT as f32;
+const WIDTH_RATIO: f32 = WINDOW_WIDTH as f32 / MODEL_WIDTH as f32;
 
 struct MainState {
     frames: usize,
@@ -23,9 +25,9 @@ impl MainState {
         let s = MainState {
             frames: 0,
             reaction_diffusion_system: ReactionDiffusionSystem::new(
-                WINDOW_WIDTH,
-                WINDOW_HEIGHT,
-                0.055,
+                MODEL_WIDTH,
+                MODEL_HEIGHT,
+                0.0545,
                 0.062,
                 1.0,
                 0.5,
@@ -48,12 +50,18 @@ impl event::EventHandler for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         graphics::clear(ctx);
 
-        let rgba_buffer = rds_to_frame_buffer(&self.reaction_diffusion_system);
+        let dynamic_image =
+            DynamicImage::ImageRgba8(rds_to_rgba_image(&self.reaction_diffusion_system));
+
         let image = graphics::Image::from_rgba8(
             ctx,
-            self.reaction_diffusion_system.width as u16,
-            self.reaction_diffusion_system.height as u16,
-            &rgba_buffer,
+            WINDOW_WIDTH as u16,
+            WINDOW_HEIGHT as u16,
+            &dynamic_image.resize(
+                WINDOW_WIDTH as u32,
+                WINDOW_HEIGHT as u32,
+                FilterType::Triangle,
+            ).to_rgba().into_raw(),
         )?;
         graphics::draw(ctx, &image, Point2::new(0.0, 0.0), 0.0)?;
 
@@ -68,15 +76,22 @@ impl event::EventHandler for MainState {
         Ok(())
     }
 
-    fn mouse_button_down_event(
+    fn mouse_motion_event(
         &mut self,
         _ctx: &mut Context,
-        _button: ggez::event::MouseButton,
+        state: ggez::event::MouseState,
         x: i32,
         y: i32,
+        _xrel: i32,
+        _yrel: i32,
     ) {
-        self.reaction_diffusion_system
-            .set(&ChemicalSpecies::V, x as isize, y as isize, 1.0)
+        if state.is_mouse_button_pressed(MouseButton::Left) {
+            let x = x as f32 / WIDTH_RATIO;
+            let y = y as f32 / HEIGHT_RATIO;
+
+            self.reaction_diffusion_system
+                .set(&ChemicalSpecies::V, x as isize, y as isize, 1.0)
+        }
     }
 }
 
@@ -104,35 +119,42 @@ pub fn main() {
     }
 }
 
-fn rds_to_frame_buffer(rds: &ReactionDiffusionSystem) -> Vec<u8> {
-    (0..rds.height)
-        .flat_map(|y| (0..rds.width).map(move |x| (x, y)))
-        .map(|(x, y)| {
-            let u = rds.get(&ChemicalSpecies::U, x as isize, y as isize);
-            let v = rds.get(&ChemicalSpecies::V, x as isize, y as isize);
+//fn rds_to_rgba_image(rds: &ReactionDiffusionSystem) -> RgbaImage {
+//    ImageBuffer::from_fn(rds.width as u32, rds.height as u32, |x, y| {
+//        let u = rds.get(&ChemicalSpecies::U, x as isize, y as isize);
+//        let v = rds.get(&ChemicalSpecies::V, x as isize, y as isize);
+//        let hue = (0.5 + 0.5 * (20.0 * v + 10.0 * u).sin()).to_degrees();
+//
+//        Rgba(hsvf32_to_rgba8(hue, 1.0, 1.0))
+//    })
+//}
 
-            (0.5 + 0.5 * (20.0 * v + 10.0 * u).sin()).to_degrees()
-        })
-        .map(|hue| hsvf32_to_rgba8(hue, 1.0, 1.0).to_vec())
-        .flatten()
-        .collect()
+fn rds_to_rgba_image(rds: &ReactionDiffusionSystem) -> RgbaImage {
+    ImageBuffer::from_fn(rds.width as u32, rds.height as u32, |x, y| {
+        let u = rds.get(&ChemicalSpecies::U, x as isize, y as isize);
+        let v = rds.get(&ChemicalSpecies::V, x as isize, y as isize);
+        let value = 0.5 + 0.5 * (20.0 * v + 10.0 * u).sin();
+        let value = (value * 255.0) as u8;
+
+        Rgba([value, value, value, 255])
+    })
 }
 
-fn hsvf32_to_rgba8(hue: f32, saturation: f32, value: f32) -> [u8; 4] {
-    let i = (hue * 6.0).floor() as isize;
-    let f = hue * 6.0 - i as f32;
-    let p = value * (1.0 - saturation);
-    let q = value * (1.0 - f * saturation);
-    let t = value * (1.0 - (1.0 - f) * saturation);
-
-    let (r, g, b) = match i % 6 {
-        0 => (value, t, p),
-        1 => (q, value, p),
-        2 => (p, value, t),
-        3 => (p, q, value),
-        4 => (t, p, value),
-        _ => (value, p, q),
-    };
-
-    [(r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8, 255]
-}
+//fn hsvf32_to_rgba8(hue: f32, saturation: f32, value: f32) -> [u8; 4] {
+//    let i = (hue * 6.0).floor() as isize;
+//    let f = hue * 6.0 - i as f32;
+//    let p = value * (1.0 - saturation);
+//    let q = value * (1.0 - f * saturation);
+//    let t = value * (1.0 - (1.0 - f) * saturation);
+//
+//    let (r, g, b) = match i % 6 {
+//        0 => (value, t, p),
+//        1 => (q, value, p),
+//        2 => (p, value, t),
+//        3 => (p, q, value),
+//        4 => (t, p, value),
+//        _ => (value, p, q),
+//    };
+//
+//    [(r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8, 255]
+//}
