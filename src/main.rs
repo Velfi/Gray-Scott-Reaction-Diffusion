@@ -1,16 +1,19 @@
 mod gray_scott_model;
 
-use ggez::{event, graphics, graphics::Point2, Context, GameResult};
+use ggez::{
+    event::{self, Keycode, Mod, MouseButton},
+    graphics::{self, DrawParam, Point2},
+    Context, GameResult,
+};
 use gray_scott_model::{ChemicalSpecies, ReactionDiffusionSystem};
-use image::{DynamicImage, FilterType, ImageBuffer, Rgba, RgbaImage};
+use image::{DynamicImage, GenericImageView, ImageBuffer, Rgba, RgbaImage};
 use std::{env, path};
-use ggez::event::MouseButton;
 
 const WINDOW_HEIGHT: usize = 810;
 const WINDOW_WIDTH: usize = 1440;
 
-const MODEL_HEIGHT: usize = 81;
-const MODEL_WIDTH: usize = 144;
+const MODEL_HEIGHT: usize = 180;
+const MODEL_WIDTH: usize = 320;
 
 const HEIGHT_RATIO: f32 = WINDOW_HEIGHT as f32 / MODEL_HEIGHT as f32;
 const WIDTH_RATIO: f32 = WINDOW_WIDTH as f32 / MODEL_WIDTH as f32;
@@ -18,6 +21,7 @@ const WIDTH_RATIO: f32 = WINDOW_WIDTH as f32 / MODEL_WIDTH as f32;
 struct MainState {
     frames: usize,
     reaction_diffusion_system: ReactionDiffusionSystem,
+    fast_forward: bool,
 }
 
 impl MainState {
@@ -32,6 +36,7 @@ impl MainState {
                 1.0,
                 0.5,
             ),
+            fast_forward: false,
         };
 
         Ok(s)
@@ -50,21 +55,26 @@ impl event::EventHandler for MainState {
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
         graphics::clear(ctx);
 
-        let dynamic_image =
-            DynamicImage::ImageRgba8(rds_to_rgba_image(&self.reaction_diffusion_system));
+        if !self.fast_forward {
+            let dynamic_image =
+                DynamicImage::ImageRgba8(rds_to_rgba_image(&self.reaction_diffusion_system));
 
-        let image = graphics::Image::from_rgba8(
-            ctx,
-            WINDOW_WIDTH as u16,
-            WINDOW_HEIGHT as u16,
-            &dynamic_image.resize(
-                WINDOW_WIDTH as u32,
-                WINDOW_HEIGHT as u32,
-                FilterType::Triangle,
-            ).to_rgba().into_raw(),
-        )?;
-        graphics::draw(ctx, &image, Point2::new(0.0, 0.0), 0.0)?;
+            let image = graphics::Image::from_rgba8(
+                ctx,
+                dynamic_image.width() as u16,
+                dynamic_image.height() as u16,
+                &dynamic_image.to_rgba().into_raw(),
+            )?;
 
+            graphics::draw_ex(
+                ctx,
+                &image,
+                DrawParam {
+                    scale: Point2::new(WIDTH_RATIO, HEIGHT_RATIO),
+                    ..Default::default()
+                },
+            )?;
+        }
         graphics::present(ctx);
 
         self.frames += 1;
@@ -74,6 +84,20 @@ impl event::EventHandler for MainState {
         }
 
         Ok(())
+    }
+
+    fn key_down_event(&mut self, ctx: &mut Context, keycode: Keycode, _keymod: Mod, _repeat: bool) {
+        match keycode {
+            Keycode::Escape => ctx.quit().expect("Should never fail"),
+            Keycode::F => {
+                self.fast_forward = !self.fast_forward;
+                println!(
+                    "Fast Forward {}",
+                    if self.fast_forward { "On" } else { "Off" }
+                );
+            }
+            _ => (),
+        }
     }
 
     fn mouse_motion_event(
