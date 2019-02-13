@@ -1,0 +1,12 @@
+[package]
+name = "reaction_diffusion"
+version = "0.1.0"
+authors = ["Zelda Hessler <zhessler@nerdery.com>"]
+edition = "2018"
+
+[features]
+cargo-resource-root = []
+
+[dependencies]
+ggez = "^0.4"
+gfx = "^0.17"
