@@ -11,3 +11,4 @@ cargo-resource-root = []
 ggez = "^0.4"
 gfx = "^0.17"
 image = "^0.21"
+rayon = "^1.0"

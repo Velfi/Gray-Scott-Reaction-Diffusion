@@ -1,10 +1,12 @@
 use std::iter;
+use rayon::prelude::*;
 
 const CLAMP_ERROR: &str = "min should be less than or equal to max, plz learn to clamp";
 
 pub struct ReactionDiffusionSystem {
     pub width: usize,
     pub height: usize,
+    coords_list: Vec<(usize, usize)>,
     f: f32,
     k: f32,
     delta_u: f32,
@@ -22,9 +24,12 @@ pub enum ChemicalSpecies {
 impl ReactionDiffusionSystem {
     pub fn new(width: usize, height: usize, f: f32, k: f32, delta_u: f32, delta_v: f32) -> Self {
         let vec_capacity = width * height;
+        let coords_list = (0..height)
+            .flat_map(|y| (0..width).map(move |x| (x, y))).collect();
         Self {
             width,
             height,
+            coords_list,
             f,
             k,
             delta_u,
@@ -71,11 +76,10 @@ impl ReactionDiffusionSystem {
     }
 
     pub fn update(&mut self, delta_t: f32) {
-        let (new_u, new_v): (Vec<f32>, Vec<f32>) = (0..self.height)
-            .flat_map(|y| (0..self.width).map(move |x| (x, y)))
-            .fold((Vec::new(), Vec::new()), |mut acc, (x, y)| {
-                let x = x as isize;
-                let y = y as isize;
+        let (new_u, new_v): (Vec<f32>, Vec<f32>) = self.coords_list.par_iter()
+            .fold(|| (Vec::new(), Vec::new()), |mut acc, (x, y)| {
+                let x = *x as isize;
+                let y = *y as isize;
                 let u = self.get(&ChemicalSpecies::U, x, y);
                 let v = self.get(&ChemicalSpecies::V, x, y);
 
@@ -89,6 +93,11 @@ impl ReactionDiffusionSystem {
 
                 acc.0.push(clamp_f32(u + delta_u * delta_t, -1.0, 1.0));
                 acc.1.push(clamp_f32(v + delta_v * delta_t, -1.0, 1.0));
+                acc
+            })
+            .reduce(|| (Vec::new(), Vec::new()), |mut acc: (Vec<f32>, Vec<f32>), mut vecs: (Vec<f32>, Vec<f32>)| {
+                acc.0.append(&mut vecs.0);
+                acc.1.append(&mut vecs.1);
                 acc
             });
 
