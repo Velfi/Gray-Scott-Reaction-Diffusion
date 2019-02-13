@@ -21,6 +21,17 @@ const MODEL_WIDTH: usize = 320;
 const HEIGHT_RATIO: f32 = WINDOW_HEIGHT as f32 / MODEL_HEIGHT as f32;
 const WIDTH_RATIO: f32 = WINDOW_WIDTH as f32 / MODEL_WIDTH as f32;
 
+const MODEL_BRAIN_CORAL: (f32, f32) = (0.0545, 0.062);
+const MODEL_MITOSIS: (f32, f32) = (0.0367, 0.0649);
+const MODEL_FINGERPRINT: (f32, f32) = (0.0545, 0.062);
+const MODEL_U_SKATE_WORLD: (f32, f32) = (0.062, 0.061);
+const MODEL_RIPPLES: (f32, f32) = (0.018, 0.051);
+const MODEL_UNDULATING: (f32, f32) = (0.026, 0.051);
+const MODEL_WORMS: (f32, f32) = (0.078, 0.061);
+const MODEL_SOLITON_COLLAPSE: (f32, f32) = (0.022, 0.06);
+
+const CURRENT_MODEL: (f32, f32) = MODEL_SOLITON_COLLAPSE;
+
 struct MainState {
     frames: usize,
     reaction_diffusion_system: ReactionDiffusionSystem,
@@ -42,16 +53,14 @@ impl MainState {
             reaction_diffusion_system: ReactionDiffusionSystem::new(
                 MODEL_WIDTH,
                 MODEL_HEIGHT,
-                0.0545,
-                0.062,
+                CURRENT_MODEL.0,
+                CURRENT_MODEL.1,
                 1.0,
                 0.5,
             ),
             fast_forward: false,
             gradient,
         };
-
-        println!("{:?}", s.gradient.get_bounding_colors_for_t(0.5));
 
         Ok(s)
     }
@@ -116,7 +125,7 @@ impl event::EventHandler for MainState {
             let y = y as f32 / HEIGHT_RATIO;
 
             self.reaction_diffusion_system
-                .set(&ChemicalSpecies::V, x as isize, y as isize, 1.0)
+                .set(&ChemicalSpecies::V, x as isize, y as isize, 0.99)
         }
     }
 

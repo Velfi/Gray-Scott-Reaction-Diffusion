@@ -2,6 +2,7 @@ use crate::{utils::clamp_f32, utils::get_wrapping_index};
 use rayon::prelude::*;
 use std::iter;
 
+// This is a bad name, Come up with a name that describes the bizarre effects this has.
 const SPEED: f32 = 0.1;
 
 pub struct ReactionDiffusionSystem {
@@ -97,8 +98,8 @@ impl ReactionDiffusionSystem {
                         + (u * v * v)
                         - (self.k + self.f) * v;
 
-                    acc.0.push(u + delta_u * delta_t * SPEED);
-                    acc.1.push(v + delta_v * delta_t * SPEED);
+                    acc.1.push(clamp_f32((v + delta_v * delta_t * SPEED), -1.0, 1.0));
+                    acc.0.push(clamp_f32((u + delta_u * delta_t * SPEED), -1.0, 1.0));
                     acc
                 },
             )
