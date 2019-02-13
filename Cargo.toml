@@ -4,9 +4,6 @@ version = "0.1.0"
 authors = ["Zelda Hessler <zhessler@nerdery.com>"]
 edition = "2018"
 
-[profile.release]
-debug = true
-
 [features]
 cargo-resource-root = []
 
@@ -15,3 +12,4 @@ ggez = "^0.4"
 gfx = "^0.17"
 image = "^0.21"
 rayon = "^1.0"
+itertools = "^0.8"

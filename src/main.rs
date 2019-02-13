@@ -1,10 +1,13 @@
+mod gradient;
 mod gray_scott_model;
+mod utils;
 
 use ggez::{
     event::{self, Keycode, Mod, MouseButton},
     graphics::{self, DrawParam, Point2},
     Context, GameResult,
 };
+use gradient::ColorGradient;
 use gray_scott_model::{ChemicalSpecies, ReactionDiffusionSystem};
 use image::{DynamicImage, GenericImageView, ImageBuffer, Rgba, RgbaImage};
 use std::{env, path};
@@ -22,10 +25,18 @@ struct MainState {
     frames: usize,
     reaction_diffusion_system: ReactionDiffusionSystem,
     fast_forward: bool,
+    gradient: ColorGradient,
 }
 
 impl MainState {
     fn new(_ctx: &mut Context) -> GameResult<MainState> {
+        let mut gradient = ColorGradient::from_colors([0, 0, 0], [255, 255, 255]);
+        gradient.add_color_at_t(0.80, [0, 20, 230]);
+        gradient.add_color_at_t(0.63, [200, 0, 255]);
+        gradient.add_color_at_t(0.60, [255, 0, 0]);
+        gradient.add_color_at_t(0.53, [0, 255, 255]);
+        gradient.add_color_at_t(0.40, [0, 0, 0]);
+
         let s = MainState {
             frames: 0,
             reaction_diffusion_system: ReactionDiffusionSystem::new(
@@ -37,7 +48,10 @@ impl MainState {
                 0.5,
             ),
             fast_forward: false,
+            gradient,
         };
+
+        println!("{:?}", s.gradient.get_bounding_colors_for_t(0.5));
 
         Ok(s)
     }
@@ -47,7 +61,7 @@ impl event::EventHandler for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
         let dt = ggez::timer::get_delta(ctx);
         self.reaction_diffusion_system
-            .update(dt.as_millis() as f32 * 0.01);
+            .update(dt.as_millis() as f32);
 
         Ok(())
     }
@@ -56,8 +70,10 @@ impl event::EventHandler for MainState {
         graphics::clear(ctx);
 
         if !self.fast_forward {
-            let dynamic_image =
-                DynamicImage::ImageRgba8(rds_to_rgba_image(&self.reaction_diffusion_system));
+            let dynamic_image = DynamicImage::ImageRgba8(rds_to_rgba_image(
+                &self.reaction_diffusion_system,
+                &self.gradient,
+            ));
 
             let image = graphics::Image::from_rgba8(
                 ctx,
@@ -86,20 +102,6 @@ impl event::EventHandler for MainState {
         Ok(())
     }
 
-    fn key_down_event(&mut self, ctx: &mut Context, keycode: Keycode, _keymod: Mod, _repeat: bool) {
-        match keycode {
-            Keycode::Escape => ctx.quit().expect("Should never fail"),
-            Keycode::F => {
-                self.fast_forward = !self.fast_forward;
-                println!(
-                    "Fast Forward {}",
-                    if self.fast_forward { "On" } else { "Off" }
-                );
-            }
-            _ => (),
-        }
-    }
-
     fn mouse_motion_event(
         &mut self,
         _ctx: &mut Context,
@@ -115,6 +117,20 @@ impl event::EventHandler for MainState {
 
             self.reaction_diffusion_system
                 .set(&ChemicalSpecies::V, x as isize, y as isize, 1.0)
+        }
+    }
+
+    fn key_down_event(&mut self, ctx: &mut Context, keycode: Keycode, _keymod: Mod, _repeat: bool) {
+        match keycode {
+            Keycode::Escape => ctx.quit().expect("Should never fail"),
+            Keycode::F => {
+                self.fast_forward = !self.fast_forward;
+                println!(
+                    "Fast Forward {}",
+                    if self.fast_forward { "On" } else { "Off" }
+                );
+            }
+            _ => (),
         }
     }
 }
@@ -143,42 +159,15 @@ pub fn main() {
     }
 }
 
-//fn rds_to_rgba_image(rds: &ReactionDiffusionSystem) -> RgbaImage {
-//    ImageBuffer::from_fn(rds.width as u32, rds.height as u32, |x, y| {
-//        let u = rds.get(&ChemicalSpecies::U, x as isize, y as isize);
-//        let v = rds.get(&ChemicalSpecies::V, x as isize, y as isize);
-//        let hue = (0.5 + 0.5 * (20.0 * v + 10.0 * u).sin()).to_degrees();
-//
-//        Rgba(hsvf32_to_rgba8(hue, 1.0, 1.0))
-//    })
-//}
-
-fn rds_to_rgba_image(rds: &ReactionDiffusionSystem) -> RgbaImage {
+fn rds_to_rgba_image(rds: &ReactionDiffusionSystem, color_gradient: &ColorGradient) -> RgbaImage {
     ImageBuffer::from_fn(rds.width as u32, rds.height as u32, |x, y| {
         let u = rds.get(&ChemicalSpecies::U, x as isize, y as isize);
         let v = rds.get(&ChemicalSpecies::V, x as isize, y as isize);
         let value = 0.5 + 0.5 * (20.0 * v + 10.0 * u).sin();
-        let value = (value * 255.0) as u8;
+        let t = (value + 1.0) / 2.0;
 
-        Rgba([value, value, value, 255])
+        let [r, g, b] = color_gradient.color_at_t(t);
+
+        Rgba([r, g, b, 255])
     })
 }
-
-//fn hsvf32_to_rgba8(hue: f32, saturation: f32, value: f32) -> [u8; 4] {
-//    let i = (hue * 6.0).floor() as isize;
-//    let f = hue * 6.0 - i as f32;
-//    let p = value * (1.0 - saturation);
-//    let q = value * (1.0 - f * saturation);
-//    let t = value * (1.0 - (1.0 - f) * saturation);
-//
-//    let (r, g, b) = match i % 6 {
-//        0 => (value, t, p),
-//        1 => (q, value, p),
-//        2 => (p, value, t),
-//        3 => (p, q, value),
-//        4 => (t, p, value),
-//        _ => (value, p, q),
-//    };
-//
-//    [(r * 255.0) as u8, (g * 255.0) as u8, (b * 255.0) as u8, 255]
-//}

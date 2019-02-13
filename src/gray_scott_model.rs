@@ -1,8 +1,8 @@
+use crate::{utils::clamp_f32, utils::get_wrapping_index};
 use rayon::prelude::*;
 use std::iter;
 
-const CLAMP_ERROR: &str = "min should be less than or equal to max, plz learn to clamp";
-const SPEEDUP: f32 = 10.0;
+const SPEED: f32 = 0.1;
 
 pub struct ReactionDiffusionSystem {
     pub width: usize,
@@ -42,7 +42,7 @@ impl ReactionDiffusionSystem {
     }
 
     pub fn get(&self, cs: &ChemicalSpecies, x: isize, y: isize) -> f32 {
-        let index = get_index(x, y, self.width, self.height);
+        let index = get_wrapping_index(x, y, self.width, self.height);
         let cs_vec = match cs {
             ChemicalSpecies::U => &self.u,
             ChemicalSpecies::V => &self.v,
@@ -54,7 +54,7 @@ impl ReactionDiffusionSystem {
     }
 
     pub fn set(&mut self, cs: &ChemicalSpecies, x: isize, y: isize, v: f32) {
-        let index = get_index(x, y, self.width, self.height);
+        let index = get_wrapping_index(x, y, self.width, self.height);
         let cs_vec = match cs {
             ChemicalSpecies::U => &mut self.u,
             ChemicalSpecies::V => &mut self.v,
@@ -97,8 +97,8 @@ impl ReactionDiffusionSystem {
                         + (u * v * v)
                         - (self.k + self.f) * v;
 
-                    acc.0.push(u + delta_u * delta_t * SPEEDUP);
-                    acc.1.push(v + delta_v * delta_t * SPEEDUP);
+                    acc.0.push(u + delta_u * delta_t * SPEED);
+                    acc.1.push(v + delta_v * delta_t * SPEED);
                     acc
                 },
             )
@@ -113,54 +113,5 @@ impl ReactionDiffusionSystem {
 
         self.u = new_u;
         self.v = new_v;
-    }
-}
-
-pub fn get_index(x: isize, y: isize, width: usize, height: usize) -> usize {
-    (((y + height as isize) % height as isize) * width as isize
-        + ((x + width as isize) % width as isize)) as usize
-}
-
-fn clamp_f32(n: f32, min: f32, max: f32) -> f32 {
-    if min > max {
-        panic!(CLAMP_ERROR)
-    }
-
-    (max).min((min).max(n))
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_get_index() {
-        let test_vec = vec![0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-        let test_grid_height = 4;
-        let test_grid_width = 3;
-
-        use super::get_index;
-
-        assert_eq!(0, get_index(0, 0, test_grid_width, test_grid_height));
-        assert_eq!(0, get_index(3, 0, test_grid_width, test_grid_height));
-        assert_eq!(0, get_index(3, 4, test_grid_width, test_grid_height));
-        assert_eq!(6, get_index(6, 2, test_grid_width, test_grid_height));
-        assert_eq!(7, get_index(-2, -2, test_grid_width, test_grid_height));
-        assert_eq!(4, get_index(-2456, 562, test_grid_width, test_grid_height));
-    }
-
-    #[test]
-    fn test_clamp_f32() {
-        use super::clamp_f32;
-
-        assert_eq!(0.0, clamp_f32(-100.0, 0.0, 10.0));
-        assert_eq!(10.0, clamp_f32(100.0, 0.0, 10.0));
-        assert_eq!(8.56, clamp_f32(8.56, 0.0, 10.0));
-    }
-
-    #[test]
-    #[should_panic(expected = "min should be less than or equal to max, plz learn to clamp")]
-    fn test_clamp_f32_panic() {
-        use super::clamp_f32;
-
-        clamp_f32(5.0, 7.0, 2.0);
     }
 }
