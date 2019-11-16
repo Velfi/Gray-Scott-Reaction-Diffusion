@@ -5,9 +5,12 @@ Reaction–diffusion systems are mathematical models which correspond to several
 If that sounds like gibberish, just know that it's an algorithm for modeling the processes that create lots of natural patterns.
 For more cool patterns in nature, [see here][patterns-in-nature].
 
+![alt text][example_soliton]
+![alt text][example_brain_coral]
+
 ## Running The Visualizer
 
-You'll need to have Rust and `cargo` installed. Then, run `cargo run --release` in you terminal of choice.
+You'll need to have Rust and `cargo` installed. Then, run `cargo run --release` in you terminal of choice. Click and drag around to seed the reaction and interact with it.
 
 ## Seeing Different Reactions
 
@@ -34,3 +37,5 @@ The simulation runs pretty slowly right now because of the inefficient way I'm c
 
 [wikipedia]: https://en.wikipedia.org/wiki/Reaction%E2%80%93diffusion_system
 [patterns-in-nature]: https://en.wikipedia.org/wiki/Patterns_in_nature
+[example_soliton]: /example_soliton.png "An example of the 'Soliton Collapse' setting"
+[example_brain_coral]: /example_brain_coral.png "An example of the 'Brain Coral' setting"
