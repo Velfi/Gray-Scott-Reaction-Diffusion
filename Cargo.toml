@@ -1,14 +1,14 @@
 [package]
-name = "reaction_diffusion"
+name = "gray_scott_reaction_diffusion"
 version = "0.1.0"
-authors = ["Zelda Hessler <zhessler@nerdery.com>"]
+authors = ["Zelda Hessler <zhessler@pm.me>"]
 edition = "2018"
 
 [features]
 cargo-resource-root = []
 
 [dependencies]
-ggez = "^0.4"
+ggez = "^0.5"
 gfx = "^0.17"
 image = "^0.21"
 rayon = "^1.0"

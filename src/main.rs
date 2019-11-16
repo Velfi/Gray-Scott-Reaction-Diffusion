@@ -1,12 +1,13 @@
 mod gradient;
-mod gray_scott_model;
-mod utils;
-pub mod model_presets;
 pub mod gradient_presets;
+mod gray_scott_model;
+pub mod model_presets;
+mod utils;
 
 use ggez::{
-    event::{self, Keycode, Mod, MouseButton},
-    graphics::{self, DrawParam, Point2},
+    event::{self, KeyCode, KeyMods, MouseButton},
+    graphics::{self, Color, DrawParam},
+    mint::Vector2,
     Context, GameResult,
 };
 use gradient::ColorGradient;
@@ -32,6 +33,7 @@ struct MainState {
     reaction_diffusion_system: ReactionDiffusionSystem,
     fast_forward: bool,
     gradient: ColorGradient,
+    is_mouse_button_pressed: bool,
 }
 
 impl MainState {
@@ -47,7 +49,8 @@ impl MainState {
                 0.5,
             ),
             fast_forward: false,
-            gradient: gradient_presets::new_pink_and_blue(),
+            gradient: gradient_presets::new_rainbow(),
+            is_mouse_button_pressed: false,
         };
 
         Ok(s)
@@ -56,15 +59,14 @@ impl MainState {
 
 impl event::EventHandler for MainState {
     fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
-        let dt = ggez::timer::get_delta(ctx);
-        self.reaction_diffusion_system
-            .update(dt.as_millis() as f32);
+        let dt = ggez::timer::delta(ctx);
+        self.reaction_diffusion_system.update(dt.as_millis() as f32);
 
         Ok(())
     }
 
     fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
-        graphics::clear(ctx);
+        graphics::clear(ctx, Color::new(0.0, 0.0, 0.0, 1.0));
 
         if !self.fast_forward {
             let dynamic_image = DynamicImage::ImageRgba8(rds_to_rgba_image(
@@ -79,36 +81,49 @@ impl event::EventHandler for MainState {
                 &dynamic_image.to_rgba().into_raw(),
             )?;
 
-            graphics::draw_ex(
+            graphics::draw(
                 ctx,
                 &image,
                 DrawParam {
-                    scale: Point2::new(WIDTH_RATIO, HEIGHT_RATIO),
+                    scale: Vector2 {
+                        x: WIDTH_RATIO,
+                        y: HEIGHT_RATIO,
+                    },
                     ..Default::default()
                 },
             )?;
         }
-        graphics::present(ctx);
+        graphics::present(ctx)?;
 
         self.frames += 1;
         if (self.frames % 100) == 0 {
             self.frames = 1;
-            println!("FPS: {}", ggez::timer::get_fps(ctx));
+            println!("FPS: {}", ggez::timer::fps(ctx));
         }
 
         Ok(())
     }
 
-    fn mouse_motion_event(
+    fn mouse_button_down_event(
         &mut self,
         _ctx: &mut Context,
-        state: ggez::event::MouseState,
-        x: i32,
-        y: i32,
-        _xrel: i32,
-        _yrel: i32,
+        button: MouseButton,
+        _x: f32,
+        _y: f32,
     ) {
-        if state.is_mouse_button_pressed(MouseButton::Left) {
+        if button == MouseButton::Left {
+            self.is_mouse_button_pressed = true;
+        }
+    }
+
+    fn mouse_button_up_event(&mut self, _ctx: &mut Context, button: MouseButton, _x: f32, _y: f32) {
+        if button == MouseButton::Left {
+            self.is_mouse_button_pressed = false;
+        }
+    }
+
+    fn mouse_motion_event(&mut self, _ctx: &mut Context, x: f32, y: f32, _xrel: f32, _yrel: f32) {
+        if self.is_mouse_button_pressed {
             let x = x as f32 / WIDTH_RATIO;
             let y = y as f32 / HEIGHT_RATIO;
 
@@ -117,10 +132,16 @@ impl event::EventHandler for MainState {
         }
     }
 
-    fn key_down_event(&mut self, ctx: &mut Context, keycode: Keycode, _keymod: Mod, _repeat: bool) {
+    fn key_down_event(
+        &mut self,
+        ctx: &mut Context,
+        keycode: KeyCode,
+        _keymod: KeyMods,
+        _repeat: bool,
+    ) {
         match keycode {
-            Keycode::Escape => ctx.quit().expect("Should never fail"),
-            Keycode::F => {
+            KeyCode::Escape => event::quit(ctx),
+            KeyCode::F => {
                 self.fast_forward = !self.fast_forward;
                 println!(
                     "Fast Forward {}",
@@ -133,23 +154,28 @@ impl event::EventHandler for MainState {
 }
 
 pub fn main() {
-    let ctx = &mut ggez::ContextBuilder::new("Reaction Diffusion System", "Zelda Hessler")
-        .window_mode(ggez::conf::WindowMode {
-            width: WINDOW_WIDTH as u32,
-            height: WINDOW_HEIGHT as u32,
-            ..Default::default()
-        })
-        .build()
-        .expect("Failed to create a Context");
-
-    if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
+    let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
         let mut path = path::PathBuf::from(manifest_dir);
         path.push("resources");
-        ctx.filesystem.mount(&path, true);
-    }
+        path
+    } else {
+        path::PathBuf::from("./resources")
+    };
+
+    let (ctx, events_loop) =
+        &mut ggez::ContextBuilder::new("Reaction Diffusion System", "Zelda Hessler")
+            .window_mode(ggez::conf::WindowMode {
+                width: WINDOW_WIDTH as f32,
+                height: WINDOW_HEIGHT as f32,
+                ..Default::default()
+            })
+            .add_resource_path(resource_dir)
+            .build()
+            .expect("Failed to create a Context");
 
     let state = &mut MainState::new(ctx).unwrap();
-    if let Err(e) = event::run(ctx, state) {
+
+    if let Err(e) = event::run(ctx, events_loop, state) {
         println!("Error encountered: {}", e);
     } else {
         println!("Game exited cleanly.");

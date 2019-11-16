@@ -44,14 +44,18 @@ impl ColorGradient {
     }
 
     pub fn get_bounding_colors_for_t(&self, t: f32) -> (TColor, TColor) {
-        if let Some((position, upper_color)) =
-            self.spectrum.iter().find_position(|(color_t, _)| *color_t >= t)
+        if let Some((position, upper_color)) = self
+            .spectrum
+            .iter()
+            .find_position(|(color_t, _)| *color_t >= t)
         {
             if position >= 1 {
                 let p_minus_one = position - 1;
                 return (self.spectrum[p_minus_one], *upper_color);
             }
         };
+
+        println!("Failed to get bounding colors, falling back");
 
         ((0.0, [0, 0, 0]), (1.0, [255, 255, 255]))
     }
