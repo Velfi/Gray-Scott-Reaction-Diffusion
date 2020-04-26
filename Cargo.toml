@@ -8,8 +8,8 @@ edition = "2018"
 cargo-resource-root = []
 
 [dependencies]
-ggez = "^0.5"
-gfx = "^0.17"
-image = "^0.21"
+ggez = "0.5"
+gfx = "0.18.2"
+image = "0.23.4"
 rayon = "^1.0"
-itertools = "^0.8"
+itertools = "0.9"

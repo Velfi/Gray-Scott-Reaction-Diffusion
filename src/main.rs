@@ -20,13 +20,13 @@ const WINDOW_WIDTH: usize = 1440;
 
 const ASPECT_RATIO: f32 = WINDOW_WIDTH as f32 / WINDOW_HEIGHT as f32;
 
-const MODEL_HEIGHT: usize = 240;
+const MODEL_HEIGHT: usize = 300;
 const MODEL_WIDTH: usize = (MODEL_HEIGHT as f32 * ASPECT_RATIO) as usize;
 
 const HEIGHT_RATIO: f32 = WINDOW_HEIGHT as f32 / MODEL_HEIGHT as f32;
 const WIDTH_RATIO: f32 = WINDOW_WIDTH as f32 / MODEL_WIDTH as f32;
 
-const CURRENT_MODEL: (f32, f32) = model_presets::SOLITON_COLLAPSE;
+const CURRENT_MODEL: (f32, f32) = model_presets::BRAIN_CORAL;
 
 struct MainState {
     frames: usize,
