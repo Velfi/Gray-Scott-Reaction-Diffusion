@@ -12,11 +12,18 @@ use ggez::{
 };
 use gradient::ColorGradient;
 use gray_scott_model::{ChemicalSpecies, ReactionDiffusionSystem};
-use image::{DynamicImage, GenericImageView, ImageBuffer, Rgba, RgbaImage};
-use std::{env, path};
+use log::{debug, error, info};
+use pixels::{Error, Pixels, SurfaceTexture};
+use std::time::Instant;
+use vector2::Vector2;
+use winit::dpi::LogicalSize;
+use winit::event::{Event, VirtualKeyCode};
+use winit::event_loop::{ControlFlow, EventLoop};
+use winit::window::WindowBuilder;
+use winit_input_helper::WinitInputHelper;
 
-const WINDOW_HEIGHT: usize = 900;
-const WINDOW_WIDTH: usize = 1440;
+const WINDOW_WIDTH: u32 = 1600;
+const WINDOW_HEIGHT: u32 = 1200;
 
 const ASPECT_RATIO: f32 = WINDOW_WIDTH as f32 / WINDOW_HEIGHT as f32;
 
@@ -62,59 +69,20 @@ impl event::EventHandler for MainState {
         let dt = ggez::timer::delta(ctx);
         self.reaction_diffusion_system.update(dt.as_millis() as f32);
 
-        Ok(())
-    }
-
-    fn draw(&mut self, ctx: &mut Context) -> GameResult<()> {
-        graphics::clear(ctx, Color::new(0.0, 0.0, 0.0, 1.0));
-
-        if !self.fast_forward {
-            let dynamic_image = DynamicImage::ImageRgba8(rds_to_rgba_image(
-                &self.reaction_diffusion_system,
-                &self.gradient,
-            ));
-
-            let image = graphics::Image::from_rgba8(
-                ctx,
-                dynamic_image.width() as u16,
-                dynamic_image.height() as u16,
-                &dynamic_image.to_rgba().into_raw(),
-            )?;
-
-            graphics::draw(
-                ctx,
-                &image,
-                DrawParam {
-                    scale: Vector2 {
-                        x: WIDTH_RATIO,
-                        y: HEIGHT_RATIO,
-                    },
-                    ..Default::default()
-                },
-            )?;
-        }
-        graphics::present(ctx)?;
-
-        self.frames += 1;
-        if (self.frames % 100) == 0 {
-            self.frames = 1;
-            println!("FPS: {}", ggez::timer::fps(ctx));
+            self.reaction_diffusion_system
+                .set(ChemicalSpecies::V, x as isize, y as isize, 0.80)
         }
 
         Ok(())
     }
 
-    fn mouse_button_down_event(
-        &mut self,
-        _ctx: &mut Context,
-        button: MouseButton,
-        _x: f32,
-        _y: f32,
-    ) {
-        if button == MouseButton::Left {
-            self.is_mouse_button_pressed = true;
-        }
-    }
+    fn draw(&mut self, frame: &mut [u8]) {
+        let rds = &self.reaction_diffusion_system;
+        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
+            let u = rds.get_by_index(ChemicalSpecies::U, i);
+            let v = rds.get_by_index(ChemicalSpecies::V, i);
+            let value = 0.5 + 0.5 * (20.0 * v + 10.0 * u).sin();
+            let t = (value + 1.0) / 2.0;
 
     fn mouse_button_up_event(&mut self, _ctx: &mut Context, button: MouseButton, _x: f32, _y: f32) {
         if button == MouseButton::Left {

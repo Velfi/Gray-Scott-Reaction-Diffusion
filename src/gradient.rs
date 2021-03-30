@@ -100,10 +100,6 @@ impl ColorGradient {
         self.lut.color_at_t((t * 255.0) as u8)
     }
 
-    pub fn color_at_t_u8(&self, t: u8) -> Rgb {
-        self.lut.color_at_t(t)
-    }
-
     fn rebuild_lut(&mut self) {
         self.lut = (&self.spectrum).into();
     }
