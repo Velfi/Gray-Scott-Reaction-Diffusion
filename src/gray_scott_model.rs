@@ -47,7 +47,7 @@ impl ReactionDiffusionSystem {
     }
 
     pub fn get(&self, cs: ChemicalSpecies, x: isize, y: isize) -> f32 {
-        let index = get_wrapping_index(x, y, self.width, self.height);
+        let index = get_wrapping_index(x, y, self.width as usize, self.height as usize);
         self.get_by_index(cs, index)
     }
 
@@ -74,7 +74,7 @@ impl ReactionDiffusionSystem {
     }
 
     pub fn set(&mut self, cs: ChemicalSpecies, x: isize, y: isize, v: f32) {
-        let index = get_wrapping_index(x, y, self.width, self.height);
+        let index = get_wrapping_index(x, y, self.width as usize, self.height as usize);
         let cs_vec = match cs {
             ChemicalSpecies::U => &mut self.u,
             ChemicalSpecies::V => &mut self.v,
