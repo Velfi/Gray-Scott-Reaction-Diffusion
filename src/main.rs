@@ -1,21 +1,18 @@
 mod gradient;
-pub mod gradient_presets;
 mod gray_scott_model;
-pub mod model_presets;
 mod utils;
 
-use ggez::{
-    event::{self, KeyCode, KeyMods, MouseButton},
-    graphics::{self, Color, DrawParam},
-    mint::Vector2,
-    Context, GameResult,
-};
+#[allow(dead_code)]
+mod gradient_presets;
+#[allow(dead_code)]
+mod model_presets;
+
+use circular_queue::CircularQueue;
 use gradient::ColorGradient;
 use gray_scott_model::{ChemicalSpecies, ReactionDiffusionSystem};
 use log::{debug, error, info};
 use pixels::{Error, Pixels, SurfaceTexture};
 use std::time::Instant;
-use vector2::Vector2;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
 use winit::event_loop::{ControlFlow, EventLoop};
@@ -27,26 +24,131 @@ const WINDOW_HEIGHT: u32 = 1200;
 
 const ASPECT_RATIO: f32 = WINDOW_WIDTH as f32 / WINDOW_HEIGHT as f32;
 
-const MODEL_HEIGHT: usize = 300;
-const MODEL_WIDTH: usize = (MODEL_HEIGHT as f32 * ASPECT_RATIO) as usize;
+const MODEL_HEIGHT: u32 = 400;
+const MODEL_WIDTH: u32 = (MODEL_HEIGHT as f32 * ASPECT_RATIO) as u32;
 
 const HEIGHT_RATIO: f32 = WINDOW_HEIGHT as f32 / MODEL_HEIGHT as f32;
 const WIDTH_RATIO: f32 = WINDOW_WIDTH as f32 / MODEL_WIDTH as f32;
 
-const CURRENT_MODEL: (f32, f32) = model_presets::BRAIN_CORAL;
+const CURRENT_MODEL: (f32, f32) = model_presets::SOLITON_COLLAPSE;
 
-struct MainState {
-    frames: usize,
-    reaction_diffusion_system: ReactionDiffusionSystem,
-    fast_forward: bool,
-    gradient: ColorGradient,
-    is_mouse_button_pressed: bool,
+fn main() -> Result<(), Error> {
+    env_logger::init();
+    let event_loop = EventLoop::new();
+    let mut input = WinitInputHelper::new();
+    let window = {
+        let size = LogicalSize::new(WINDOW_WIDTH as f64, WINDOW_HEIGHT as f64);
+        WindowBuilder::new()
+            .with_title("Gray Scott Reaction Diffusion")
+            .with_inner_size(size)
+            .with_min_inner_size(size)
+            .build(&event_loop)
+            .unwrap()
+    };
+
+    let mut pixels = {
+        let window_size = window.inner_size();
+        let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
+        Pixels::new(MODEL_WIDTH, MODEL_HEIGHT, surface_texture)?
+    };
+    let mut world = World::new();
+    let mut frame_time = 0.16;
+    let mut time_of_last_frame_start = Instant::now();
+
+    let mut frame_counter = 0;
+    let mut fps_values = CircularQueue::with_capacity(5);
+    let mut time_of_last_fps_counter_update = Instant::now();
+
+    event_loop.run(move |event, _, control_flow| {
+        // Draw the current frame
+        if let Event::RedrawRequested(_) = event {
+            world.draw(pixels.get_frame());
+            if pixels
+                .render()
+                .map_err(|e| error!("pixels.render() failed: {}", e))
+                .is_err()
+            {
+                *control_flow = ControlFlow::Exit;
+                return;
+            }
+        }
+
+        // Handle input events
+        if input.update(&event) {
+            // Close events
+            if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
+                *control_flow = ControlFlow::Exit;
+                return;
+            }
+
+            if input.mouse_pressed(0) {
+                debug!("Pressed LMB");
+                world.is_left_mouse_button_held_down = true
+            } else if input.mouse_released(0) {
+                debug!("Released LMB");
+                world.is_left_mouse_button_held_down = false
+            }
+
+            if input.mouse_pressed(1) {
+                debug!("Pressed RMB");
+                world.is_right_mouse_button_held_down = true
+            } else if input.mouse_released(1) {
+                debug!("Released RMB");
+                world.is_right_mouse_button_held_down = false
+            }
+
+            if let Some(xy) = input.mouse() {
+                world.mouse_xy = xy;
+            }
+
+            // Resize the window
+            if let Some(size) = input.window_resized() {
+                pixels.resize(size.width, size.height);
+            }
+
+            // Update internal state and request a redraw
+            window.request_redraw();
+            world.update(frame_time);
+
+            frame_time = time_of_last_frame_start.elapsed().as_secs_f32();
+            time_of_last_frame_start = Instant::now();
+
+            frame_counter += 1;
+
+            if time_of_last_fps_counter_update.elapsed().as_secs() > 1 {
+                time_of_last_fps_counter_update = Instant::now();
+                let _ = fps_values.push(frame_counter);
+                frame_counter = 0;
+
+                let fps_sum: i32 = fps_values.iter().sum();
+                let avg_fps = fps_sum as f32 / fps_values.len() as f32;
+                info!("FPS {}", avg_fps.trunc());
+            }
+        }
+    });
 }
 
-impl MainState {
-    fn new(_ctx: &mut Context) -> GameResult<MainState> {
-        let s = MainState {
+struct World {
+    pub fast_forward: bool,
+    pub frames: usize,
+    pub gradient: ColorGradient,
+    pub is_left_mouse_button_held_down: bool,
+    pub is_right_mouse_button_held_down: bool,
+    pub previous_frame_start_time: Instant,
+    pub reaction_diffusion_system: ReactionDiffusionSystem,
+    pub mouse_xy: (f32, f32),
+    pub previous_mouse_xy: Option<(f32, f32)>,
+}
+
+impl World {
+    fn new() -> Self {
+        Self {
+            fast_forward: false,
             frames: 0,
+            gradient: gradient_presets::new_rainbow(),
+            is_left_mouse_button_held_down: false,
+            is_right_mouse_button_held_down: false,
+            previous_frame_start_time: Instant::now(),
             reaction_diffusion_system: ReactionDiffusionSystem::new(
                 MODEL_WIDTH,
                 MODEL_HEIGHT,
@@ -55,25 +157,23 @@ impl MainState {
                 1.0,
                 0.5,
             ),
-            fast_forward: false,
-            gradient: gradient_presets::new_rainbow(),
-            is_mouse_button_pressed: false,
-        };
-
-        Ok(s)
+            mouse_xy: (0.0, 0.0),
+            previous_mouse_xy: None,
+        }
     }
 }
 
-impl event::EventHandler for MainState {
-    fn update(&mut self, ctx: &mut Context) -> GameResult<()> {
-        let dt = ggez::timer::delta(ctx);
-        self.reaction_diffusion_system.update(dt.as_millis() as f32);
+impl World {
+    fn update(&mut self, frame_time: f32) {
+        if self.is_left_mouse_button_held_down {
+            let (x, y) = self.mouse_xy;
+            let (x, y) = (x / WIDTH_RATIO, y / HEIGHT_RATIO);
 
             self.reaction_diffusion_system
-                .set(ChemicalSpecies::V, x as isize, y as isize, 0.80)
+                .set(ChemicalSpecies::V, x as isize, y as isize, 0.99)
         }
 
-        Ok(())
+        self.reaction_diffusion_system.update(frame_time);
     }
 
     fn draw(&mut self, frame: &mut [u8]) {
@@ -84,81 +184,9 @@ impl event::EventHandler for MainState {
             let value = 0.5 + 0.5 * (20.0 * v + 10.0 * u).sin();
             let t = (value + 1.0) / 2.0;
 
-    fn mouse_button_up_event(&mut self, _ctx: &mut Context, button: MouseButton, _x: f32, _y: f32) {
-        if button == MouseButton::Left {
-            self.is_mouse_button_pressed = false;
+            let rgb = self.gradient.color_at_t(t);
+
+            pixel.copy_from_slice(&rgb);
         }
     }
-
-    fn mouse_motion_event(&mut self, _ctx: &mut Context, x: f32, y: f32, _xrel: f32, _yrel: f32) {
-        if self.is_mouse_button_pressed {
-            let x = x as f32 / WIDTH_RATIO;
-            let y = y as f32 / HEIGHT_RATIO;
-
-            self.reaction_diffusion_system
-                .set(&ChemicalSpecies::V, x as isize, y as isize, 0.99)
-        }
-    }
-
-    fn key_down_event(
-        &mut self,
-        ctx: &mut Context,
-        keycode: KeyCode,
-        _keymod: KeyMods,
-        _repeat: bool,
-    ) {
-        match keycode {
-            KeyCode::Escape => event::quit(ctx),
-            KeyCode::F => {
-                self.fast_forward = !self.fast_forward;
-                println!(
-                    "Fast Forward {}",
-                    if self.fast_forward { "On" } else { "Off" }
-                );
-            }
-            _ => (),
-        }
-    }
-}
-
-pub fn main() {
-    let resource_dir = if let Ok(manifest_dir) = env::var("CARGO_MANIFEST_DIR") {
-        let mut path = path::PathBuf::from(manifest_dir);
-        path.push("resources");
-        path
-    } else {
-        path::PathBuf::from("./resources")
-    };
-
-    let (ctx, events_loop) =
-        &mut ggez::ContextBuilder::new("Reaction Diffusion System", "Zelda Hessler")
-            .window_mode(ggez::conf::WindowMode {
-                width: WINDOW_WIDTH as f32,
-                height: WINDOW_HEIGHT as f32,
-                ..Default::default()
-            })
-            .add_resource_path(resource_dir)
-            .build()
-            .expect("Failed to create a Context");
-
-    let state = &mut MainState::new(ctx).unwrap();
-
-    if let Err(e) = event::run(ctx, events_loop, state) {
-        println!("Error encountered: {}", e);
-    } else {
-        println!("Game exited cleanly.");
-    }
-}
-
-fn rds_to_rgba_image(rds: &ReactionDiffusionSystem, color_gradient: &ColorGradient) -> RgbaImage {
-    ImageBuffer::from_fn(rds.width as u32, rds.height as u32, |x, y| {
-        let u = rds.get(&ChemicalSpecies::U, x as isize, y as isize);
-        let v = rds.get(&ChemicalSpecies::V, x as isize, y as isize);
-        let value = 0.5 + 0.5 * (20.0 * v + 10.0 * u).sin();
-        let t = (value + 1.0) / 2.0;
-
-        let [r, g, b] = color_gradient.color_at_t(t);
-
-        Rgba([r, g, b, 255])
-    })
 }
