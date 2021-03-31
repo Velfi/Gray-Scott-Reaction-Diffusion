@@ -103,21 +103,15 @@ impl ReactionDiffusionSystem {
 
         // The reaction goes nuts if delta_t is greater than 1, so if we need to go fast then
         // it has to be calculated multiple times in steps
-        // Disabled for now
         // while delta_t > 1.0 {
         //     delta_t -= 1.0;
         //     self.reaction(1.0)
         // }
 
-        self.reaction(delta_t)
+        self.reaction(delta_t.min(1.0))
     }
 
     fn reaction(&mut self, delta_t: f32) {
-        // assert!(
-        //     delta_t <= 1.0,
-        //     "delta_t must never exceed 1.0 or the reaction gets borked"
-        // );
-
         let (new_u, new_v): (Vec<f32>, Vec<f32>) = self
             .coords_list
             .par_iter()

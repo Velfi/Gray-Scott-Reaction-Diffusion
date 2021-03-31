@@ -9,11 +9,7 @@ struct Spectrum(Vec<TColor>);
 
 impl Spectrum {
     pub fn from_colors(color_a: Rgba, color_b: Rgba) -> Self {
-        let mut spectrum = Vec::new();
-        spectrum.push((0f32, color_a));
-        spectrum.push((1f32, color_b));
-
-        Self(spectrum)
+        Self(vec![(0f32, color_a), (1f32, color_b)])
     }
 
     pub fn add_color_at_t(&mut self, t: f32, color: Rgba) {
@@ -37,7 +33,7 @@ impl Spectrum {
             r1.interpolate(&r2, mapped_t),
             g1.interpolate(&g2, mapped_t),
             b1.interpolate(&b2, mapped_t),
-            255
+            255,
         ]
     }
 
@@ -57,19 +53,19 @@ impl Spectrum {
 struct GradientLut([Rgba; 256]);
 impl GradientLut {
     pub fn color_at_t(&self, t: u8) -> Rgba {
-        self.0[t as usize].clone()
+        self.0[t as usize]
     }
 }
 
 impl From<&Spectrum> for GradientLut {
     fn from(spectrum: &Spectrum) -> Self {
-        let mut arr = [[0u8, 0, 0, 255]; 256];
+        let mut gradient = [[0u8, 0, 0, 255]; 256];
 
-        for i in 0..=255 {
-            arr[i] = spectrum.color_at_t(i as f32 / 255.0);
+        for (i, rgba) in gradient.iter_mut().enumerate() {
+            *rgba = spectrum.color_at_t(i as f32 / 255.0);
         }
 
-        GradientLut(arr)
+        GradientLut(gradient)
     }
 }
 pub struct ColorGradient {
@@ -93,11 +89,11 @@ impl ColorGradient {
     }
 
     pub fn color_at_t(&self, t: f32) -> Rgba {
-        if t > 1.0 || t < 0.0 {
+        if (0.0..=1.0).contains(&t) {
+            self.lut.color_at_t((t * 255.0) as u8)
+        } else {
             panic!("color_at_t only takes values in range of 0.0 - 1.0")
         }
-
-        self.lut.color_at_t((t * 255.0) as u8)
     }
 
     fn rebuild_lut(&mut self) {
