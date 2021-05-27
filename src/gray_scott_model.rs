@@ -10,14 +10,7 @@ pub struct ReactionDiffusionSystem {
     kill_rate: f32,
     delta_u: f32,
     delta_v: f32,
-    u: Vec<f32>,
-    v: Vec<f32>,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum ChemicalSpecies {
-    U,
-    V,
+    uvs: Vec<(f32, f32)>,
 }
 
 impl ReactionDiffusionSystem {
@@ -41,60 +34,59 @@ impl ReactionDiffusionSystem {
             kill_rate,
             delta_u,
             delta_v,
-            u: iter::repeat(1.0).take(vec_capacity).collect(),
-            v: iter::repeat(0.0).take(vec_capacity).collect(),
+            uvs: iter::repeat((1.0, 0.0)).take(vec_capacity).collect(),
         }
     }
 
-    pub fn get(&self, cs: ChemicalSpecies, x: isize, y: isize) -> f32 {
+    pub fn get(&self, x: isize, y: isize) -> (f32, f32) {
         let index = get_wrapping_index(x, y, self.width as usize, self.height as usize);
-        self.get_by_index(cs, index)
+        self.get_by_index(index)
     }
 
-    pub fn get_by_index(&self, cs: ChemicalSpecies, index: usize) -> f32 {
+    pub fn get_by_index(&self, index: usize) -> (f32, f32) {
         assert!(
             (0..self.len()).contains(&index),
             "index {} is not in range 0..{}!",
             index,
-            self.u.len()
+            self.len()
         );
 
-        let cs_vec = match cs {
-            ChemicalSpecies::U => &self.u,
-            ChemicalSpecies::V => &self.v,
-        };
-
-        *cs_vec
-            .get(index)
-            .unwrap_or_else(|| panic!("Tried to get {:?}[{}] but failed.", cs, index))
+        *self.uvs.get(index).expect("couldn't get uv by index")
     }
 
     pub fn len(&self) -> usize {
         (self.height * self.width) as usize
     }
 
-    pub fn set(&mut self, cs: ChemicalSpecies, x: isize, y: isize, v: f32) {
+    pub fn set(&mut self, x: isize, y: isize, v: (f32, f32)) {
         let index = get_wrapping_index(x, y, self.width as usize, self.height as usize);
-        let cs_vec = match cs {
-            ChemicalSpecies::U => &mut self.u,
-            ChemicalSpecies::V => &mut self.v,
-        };
+        let index = index % self.len();
+        let v = (v.0.clamp(-1.0, 1.0), v.1.clamp(-1.0, 1.0));
 
-        let index = index % cs_vec.len();
-
-        cs_vec[index] = v.clamp(-1.0, 1.0)
+        self.uvs[index] = v;
     }
 
-    pub fn get_laplacian(&self, cs: ChemicalSpecies, x: isize, y: isize) -> f32 {
-        0.05 * self.get(cs, x - 1, y - 1)
-            + 0.2 * self.get(cs, x - 1, y)
-            + 0.05 * self.get(cs, x - 1, y + 1)
-            + 0.2 * self.get(cs, x, y - 1)
-            + -1.0 * self.get(cs, x, y)
-            + 0.2 * self.get(cs, x, y + 1)
-            + 0.05 * self.get(cs, x + 1, y - 1)
-            + 0.2 * self.get(cs, x + 1, y)
-            + 0.05 * self.get(cs, x + 1, y + 1)
+    pub fn get_laplacian(&self, x: isize, y: isize) -> (f32, f32) {
+        (
+            (0.05 * self.get(x - 1, y - 1).0
+                + 0.2 * self.get(x - 1, y).0
+                + 0.05 * self.get(x - 1, y + 1).0
+                + 0.2 * self.get(x, y - 1).0
+                + -1.0 * self.get(x, y).0
+                + 0.2 * self.get(x, y + 1).0
+                + 0.05 * self.get(x + 1, y - 1).0
+                + 0.2 * self.get(x + 1, y).0
+                + 0.05 * self.get(x + 1, y + 1).0),
+            (0.05 * self.get(x - 1, y - 1).1
+                + 0.2 * self.get(x - 1, y).1
+                + 0.05 * self.get(x - 1, y + 1).1
+                + 0.2 * self.get(x, y - 1).1
+                + -1.0 * self.get(x, y).1
+                + 0.2 * self.get(x, y + 1).1
+                + 0.05 * self.get(x + 1, y - 1).1
+                + 0.2 * self.get(x + 1, y).1
+                + 0.05 * self.get(x + 1, y + 1).1),
+        )
     }
 
     pub fn update(&mut self, delta_t: f32) {
@@ -111,42 +103,37 @@ impl ReactionDiffusionSystem {
         self.reaction(delta_t.min(1.0))
     }
 
-    fn reaction(&mut self, delta_t: f32) {
-        let (new_u, new_v): (Vec<f32>, Vec<f32>) = self
+    fn reaction(&mut self, _delta_t: f32) {
+        let new_uvs = self
             .coords_list
             .par_iter()
             .fold(
-                || (Vec::new(), Vec::new()),
+                || Vec::new(),
                 |mut acc, (x, y)| {
                     let x = *x as isize;
                     let y = *y as isize;
-                    let u = self.get(ChemicalSpecies::U, x, y);
-                    let v = self.get(ChemicalSpecies::V, x, y);
+                    let (u, v) = self.get(x, y);
+                    let (laplcian_u, laplacian_v) = self.get_laplacian(x, y);
                     let reaction_rate = u * v.powi(2);
 
-                    let delta_u = self.delta_u * self.get_laplacian(ChemicalSpecies::U, x, y)
-                        - reaction_rate
-                        + self.feed_rate * (1.0 - u);
+                    let delta_u =
+                        self.delta_u * laplcian_u - reaction_rate + self.feed_rate * (1.0 - u);
 
-                    let delta_v = self.delta_v * self.get_laplacian(ChemicalSpecies::V, x, y)
-                        + reaction_rate
+                    let delta_v = self.delta_v * laplacian_v + reaction_rate
                         - (self.kill_rate + self.feed_rate) * v;
 
-                    acc.1.push((v + delta_v * delta_t).clamp(0.0, 1.0));
-                    acc.0.push((u + delta_u * delta_t).clamp(0.0, 1.0));
+                    acc.push(((v + delta_v).clamp(0.0, 1.0), (u + delta_u).clamp(0.0, 1.0)));
                     acc
                 },
             )
             .reduce(
-                || (Vec::new(), Vec::new()),
-                |mut acc: (Vec<f32>, Vec<f32>), mut vecs: (Vec<f32>, Vec<f32>)| {
-                    acc.0.append(&mut vecs.0);
-                    acc.1.append(&mut vecs.1);
+                || Vec::new(),
+                |mut acc: Vec<(f32, f32)>, mut uvs: Vec<(f32, f32)>| {
+                    acc.append(&mut uvs);
                     acc
                 },
             );
 
-        self.u = new_u;
-        self.v = new_v;
+        self.uvs = new_uvs;
     }
 }

@@ -9,7 +9,7 @@ mod model_presets;
 
 use circular_queue::CircularQueue;
 use gradient::ColorGradient;
-use gray_scott_model::{ChemicalSpecies, ReactionDiffusionSystem};
+use gray_scott_model::ReactionDiffusionSystem;
 use log::{debug, error, info};
 use pixels::{Error, Pixels, SurfaceTexture};
 use std::time::Instant;
@@ -167,10 +167,11 @@ impl World {
     fn update(&mut self, frame_time: f32) {
         if self.is_left_mouse_button_held_down {
             let (x, y) = self.mouse_xy;
-            let (x, y) = (x / WIDTH_RATIO, y / HEIGHT_RATIO);
+            let (x, y) = ((x / WIDTH_RATIO).floor(), (y / HEIGHT_RATIO).floor());
 
+            let (u, _v) = self.reaction_diffusion_system.get(x as isize, y as isize);
             self.reaction_diffusion_system
-                .set(ChemicalSpecies::V, x as isize, y as isize, 0.99)
+                .set(x as isize, y as isize, (u, 0.99))
         }
 
         self.reaction_diffusion_system.update(frame_time);
@@ -179,8 +180,7 @@ impl World {
     fn draw(&mut self, frame: &mut [u8]) {
         let rds = &self.reaction_diffusion_system;
         for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let u = rds.get_by_index(ChemicalSpecies::U, i);
-            let v = rds.get_by_index(ChemicalSpecies::V, i);
+            let (u, v) = rds.get_by_index(i);
             let value = 0.5 + 0.5 * (20.0 * v + 10.0 * u).sin();
             let t = (value + 1.0) / 2.0;
 
