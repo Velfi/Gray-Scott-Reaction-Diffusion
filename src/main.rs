@@ -33,6 +33,7 @@ const WIDTH_RATIO: f32 = WINDOW_WIDTH as f32 / MODEL_WIDTH as f32;
 const CURRENT_MODEL: (f32, f32) = model_presets::SOLITON_COLLAPSE;
 
 fn main() -> Result<(), Error> {
+    let _ = dotenv::dotenv();
     env_logger::init();
     let event_loop = EventLoop::new();
     let mut input = WinitInputHelper::new();

@@ -89,21 +89,25 @@ impl ReactionDiffusionSystem {
         )
     }
 
-    pub fn update(&mut self, delta_t: f32) {
-        // delta_t is in seconds, so we convert to milliseconds (which the diffusion calculation expects)
-        let delta_t = delta_t * 100.0;
-
+    pub fn update(&mut self, mut _delta_t: f32) {
+        // delta_t *= 100.0;
+        // trace!("updating reaction with total delta_t of {:.02?}", delta_t);
         // The reaction goes nuts if delta_t is greater than 1, so if we need to go fast then
         // it has to be calculated multiple times in steps
         // while delta_t > 1.0 {
         //     delta_t -= 1.0;
+        //     trace!(
+        //         "running reaction with fractional delta_t of {:.02?}",
+        //         delta_t
+        //     );
         //     self.reaction(1.0)
         // }
 
-        self.reaction(delta_t.min(1.0))
+        self.reaction(1.0)
     }
 
-    fn reaction(&mut self, _delta_t: f32) {
+    fn reaction(&mut self, delta_t: f32) {
+        let uvs_length = self.uvs.len();
         let new_uvs = self
             .coords_list
             .par_iter()
@@ -113,21 +117,24 @@ impl ReactionDiffusionSystem {
                     let x = *x as isize;
                     let y = *y as isize;
                     let (u, v) = self.get(x, y);
-                    let (laplcian_u, laplacian_v) = self.get_laplacian(x, y);
                     let reaction_rate = u * v.powi(2);
+                    let (laplacian_u, laplacian_v) = self.get_laplacian(x, y);
 
                     let delta_u =
-                        self.delta_u * laplcian_u - reaction_rate + self.feed_rate * (1.0 - u);
+                        self.delta_u * laplacian_u - reaction_rate + self.feed_rate * (1.0 - u);
 
                     let delta_v = self.delta_v * laplacian_v + reaction_rate
                         - (self.kill_rate + self.feed_rate) * v;
 
-                    acc.push(((v + delta_v).clamp(0.0, 1.0), (u + delta_u).clamp(0.0, 1.0)));
+                    acc.push((
+                        (u + delta_u * delta_t).clamp(0.0, 1.0),
+                        (v + delta_v * delta_t).clamp(0.0, 1.0),
+                    ));
                     acc
                 },
             )
             .reduce(
-                || Vec::new(),
+                || Vec::with_capacity(uvs_length),
                 |mut acc: Vec<(f32, f32)>, mut uvs: Vec<(f32, f32)>| {
                     acc.append(&mut uvs);
                     acc
