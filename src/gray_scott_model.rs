@@ -38,6 +38,10 @@ impl ReactionDiffusionSystem {
         }
     }
 
+    pub fn uvs(&self) -> &[(f32, f32)] {
+        &self.uvs
+    }
+
     pub fn get(&self, x: isize, y: isize) -> (f32, f32) {
         let index = get_wrapping_index(x, y, self.width as usize, self.height as usize);
         self.get_by_index(index)

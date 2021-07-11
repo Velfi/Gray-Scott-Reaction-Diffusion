@@ -10,8 +10,10 @@ mod model_presets;
 use circular_queue::CircularQueue;
 use gradient::ColorGradient;
 use gray_scott_model::ReactionDiffusionSystem;
-use log::{debug, error, info};
+use log::{error, info, trace};
 use pixels::{Error, Pixels, SurfaceTexture};
+use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
+use rayon::slice::ParallelSliceMut;
 use std::time::Instant;
 use winit::dpi::LogicalSize;
 use winit::event::{Event, VirtualKeyCode};
@@ -19,18 +21,12 @@ use winit::event_loop::{ControlFlow, EventLoop};
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
 
-const WINDOW_WIDTH: u32 = 1000;
-const WINDOW_HEIGHT: u32 = 1000;
-
+const WINDOW_WIDTH: u32 = 1280;
+const WINDOW_HEIGHT: u32 = 720;
 const ASPECT_RATIO: f32 = WINDOW_WIDTH as f32 / WINDOW_HEIGHT as f32;
-
-const MODEL_HEIGHT: u32 = 500;
+const MODEL_HEIGHT: u32 = 270;
 const MODEL_WIDTH: u32 = (MODEL_HEIGHT as f32 * ASPECT_RATIO) as u32;
-
-const HEIGHT_RATIO: f32 = WINDOW_HEIGHT as f32 / MODEL_HEIGHT as f32;
-const WIDTH_RATIO: f32 = WINDOW_WIDTH as f32 / MODEL_WIDTH as f32;
-
-const CURRENT_MODEL: (f32, f32) = model_presets::SOLITON_COLLAPSE;
+const CURRENT_MODEL: (f32, f32) = model_presets::U_SKATE_WORLD;
 
 fn main() -> Result<(), Error> {
     let _ = dotenv::dotenv();
@@ -83,18 +79,18 @@ fn main() -> Result<(), Error> {
             }
 
             if input.mouse_pressed(0) {
-                debug!("Pressed LMB");
+                trace!("Pressed LMB");
                 world.is_left_mouse_button_held_down = true
             } else if input.mouse_released(0) {
-                debug!("Released LMB");
+                trace!("Released LMB");
                 world.is_left_mouse_button_held_down = false
             }
 
             if input.mouse_pressed(1) {
-                debug!("Pressed RMB");
+                trace!("Pressed RMB");
                 world.is_right_mouse_button_held_down = true
             } else if input.mouse_released(1) {
-                debug!("Released RMB");
+                trace!("Released RMB");
                 world.is_right_mouse_button_held_down = false
             }
 
@@ -104,12 +100,12 @@ fn main() -> Result<(), Error> {
 
             // Resize the window
             if let Some(size) = input.window_resized() {
-                pixels.resize(size.width, size.height);
+                pixels.resize_surface(size.width, size.height);
             }
 
             // Update internal state and request a redraw
             window.request_redraw();
-            world.update(frame_time);
+            world.update(&pixels, frame_time);
 
             frame_time = time_of_last_frame_start.elapsed().as_secs_f32();
             time_of_last_frame_start = Instant::now();
@@ -165,29 +161,33 @@ impl World {
 }
 
 impl World {
-    fn update(&mut self, frame_time: f32) {
+    fn update(&mut self, pixels: &Pixels, frame_time: f32) {
         if self.is_left_mouse_button_held_down {
-            let (x, y) = self.mouse_xy;
-            let (x, y) = ((x / WIDTH_RATIO).floor(), (y / HEIGHT_RATIO).floor());
-
-            let (u, _v) = self.reaction_diffusion_system.get(x as isize, y as isize);
-            self.reaction_diffusion_system
-                .set(x as isize, y as isize, (u, 0.99))
+            if let Ok((x, y)) = pixels
+                .window_pos_to_pixel(self.mouse_xy)
+                .map(|(x, y)| (x as isize, y as isize))
+            {
+                self.reaction_diffusion_system.set(x, y, (0.0, 0.99))
+            }
         }
 
         self.reaction_diffusion_system.update(frame_time);
     }
 
     fn draw(&mut self, frame: &mut [u8]) {
-        let rds = &self.reaction_diffusion_system;
-        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let (u, v) = rds.get_by_index(i);
+        let uvs = self.reaction_diffusion_system.uvs().par_iter();
+        let pixels = frame.par_chunks_exact_mut(4);
+        pixels.zip_eq(uvs).for_each(|(pixel, (u, v))| {
             let value = 0.5 + 0.5 * (20.0 * v + 10.0 * u).sin();
             let t = (value + 1.0) / 2.0;
 
+            // Display as color gradient
             let rgb = self.gradient.color_at_t(t);
+            // // Display as grayscale
+            // let t = (t * 255.0).round().clamp(0.0, 255.0) as u8;
+            // let rgb = [t, t, t, 255];
 
             pixel.copy_from_slice(&rgb);
-        }
+        });
     }
 }
