@@ -26,7 +26,7 @@ const WINDOW_HEIGHT: u32 = 720;
 const ASPECT_RATIO: f32 = WINDOW_WIDTH as f32 / WINDOW_HEIGHT as f32;
 const MODEL_HEIGHT: u32 = 270;
 const MODEL_WIDTH: u32 = (MODEL_HEIGHT as f32 * ASPECT_RATIO) as u32;
-const CURRENT_MODEL: (f32, f32) = model_presets::U_SKATE_WORLD;
+const CURRENT_MODEL: (f32, f32) = model_presets::SOLITON_COLLAPSE;
 
 fn main() -> Result<(), Error> {
     let _ = dotenv::dotenv();
