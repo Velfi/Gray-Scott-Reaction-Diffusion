@@ -1,15 +1,16 @@
 [package]
 name = "gray_scott_reaction_diffusion"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["Zelda Hessler <zhessler@pm.me>"]
 edition = "2018"
 
-[features]
-cargo-resource-root = []
-
 [dependencies]
-ggez = "0.5"
-gfx = "0.18.2"
-image = "0.23.4"
-rayon = "^1.0"
-itertools = "0.9"
+circular-queue = "0.2.6"
+dotenv = "0.15.0"
+env_logger = "0.8.4"
+itertools = "0.10.1"
+log = "0.4.14"
+pixels = "0.4.0"
+rayon = "1.5.1"
+winit = "0.25.0"
+winit_input_helper = "0.10.0"
