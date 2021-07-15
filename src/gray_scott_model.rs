@@ -3,9 +3,9 @@ use rayon::prelude::*;
 use std::iter;
 
 pub struct ReactionDiffusionSystem {
-    pub width: u32,
-    pub height: u32,
-    coords_list: Vec<(u32, u32)>,
+    pub width: usize,
+    pub height: usize,
+    coords_list: Vec<(isize, isize)>,
     feed_rate: f32,
     kill_rate: f32,
     delta_u: f32,
@@ -15,16 +15,29 @@ pub struct ReactionDiffusionSystem {
 
 impl ReactionDiffusionSystem {
     pub fn new(
-        width: u32,
-        height: u32,
+        width: usize,
+        height: usize,
         feed_rate: f32,
         kill_rate: f32,
         delta_u: f32,
         delta_v: f32,
     ) -> Self {
-        let vec_capacity = (width * height) as usize;
-        let coords_list = (0..height)
-            .flat_map(|y| (0..width).map(move |x| (x, y)))
+        assert!(
+            width <= isize::MAX as usize,
+            "Reaction diffusion system width must be less than or equal to {} but {} was passed",
+            isize::MAX,
+            width
+        );
+        assert!(
+            height <= isize::MAX as usize,
+            "Reaction diffusion system height must be less than or equal to {} but {} was passed",
+            isize::MAX,
+            height
+        );
+
+        let vec_capacity = width * height;
+        let coords_list = (0..height as isize)
+            .flat_map(|y| (0..width as isize).map(move |x| (x, y)))
             .collect();
         Self {
             width,
@@ -43,7 +56,7 @@ impl ReactionDiffusionSystem {
     }
 
     pub fn get(&self, x: isize, y: isize) -> (f32, f32) {
-        let index = get_wrapping_index(x, y, self.width as usize, self.height as usize);
+        let index = get_wrapping_index(x, y, self.width, self.height);
         self.get_by_index(index)
     }
 
@@ -59,11 +72,11 @@ impl ReactionDiffusionSystem {
     }
 
     pub fn len(&self) -> usize {
-        (self.height * self.width) as usize
+        self.height * self.width
     }
 
     pub fn set(&mut self, x: isize, y: isize, v: (f32, f32)) {
-        let index = get_wrapping_index(x, y, self.width as usize, self.height as usize);
+        let index = get_wrapping_index(x, y, self.width, self.height);
         let index = index % self.len();
         let v = (v.0.clamp(-1.0, 1.0), v.1.clamp(-1.0, 1.0));
 
@@ -118,8 +131,8 @@ impl ReactionDiffusionSystem {
             .fold(
                 || Vec::new(),
                 |mut acc, (x, y)| {
-                    let x = *x as isize;
-                    let y = *y as isize;
+                    let x = *x;
+                    let y = *y;
                     let (u, v) = self.get(x, y);
                     let reaction_rate = u * v.powi(2);
                     let (laplacian_u, laplacian_v) = self.get_laplacian(x, y);

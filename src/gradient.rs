@@ -23,18 +23,10 @@ impl Spectrum {
 
     pub fn color_at_t(&self, t: f32) -> Rgba {
         let t = t.clamp(0.0, 1.0);
-        let (before_color, after_color) = self.get_bounding_colors_for_t(t);
-        let mapped_t = map_t_of_range_a_to_range_b(t, before_color.0, after_color.0, 0.0, 1.0);
+        let ((left_t, left_color), (right_t, right_color)) = self.get_bounding_colors_for_t(t);
+        let mapped_t = map_t_of_range_a_to_range_b(t, left_t..right_t, 0.0..1.0);
 
-        let [r1, g1, b1, ..] = before_color.1;
-        let [r2, g2, b2, ..] = after_color.1;
-
-        [
-            r1.interpolate(&r2, mapped_t),
-            g1.interpolate(&g2, mapped_t),
-            b1.interpolate(&b2, mapped_t),
-            255,
-        ]
+        left_color.interpolate(&right_color, mapped_t)
     }
 
     fn get_bounding_colors_for_t(&self, t: f32) -> (TColor, TColor) {

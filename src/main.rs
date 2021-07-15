@@ -24,8 +24,8 @@ use winit_input_helper::WinitInputHelper;
 const WINDOW_WIDTH: u32 = 1280;
 const WINDOW_HEIGHT: u32 = 720;
 const ASPECT_RATIO: f32 = WINDOW_WIDTH as f32 / WINDOW_HEIGHT as f32;
-const MODEL_HEIGHT: u32 = 270;
-const MODEL_WIDTH: u32 = (MODEL_HEIGHT as f32 * ASPECT_RATIO) as u32;
+const MODEL_HEIGHT: usize = 270;
+const MODEL_WIDTH: usize = (MODEL_HEIGHT as f32 * ASPECT_RATIO) as usize;
 const CURRENT_MODEL: (f32, f32) = model_presets::SOLITON_COLLAPSE;
 
 fn main() -> Result<(), Error> {
@@ -46,7 +46,7 @@ fn main() -> Result<(), Error> {
     let mut pixels = {
         let window_size = window.inner_size();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        Pixels::new(MODEL_WIDTH, MODEL_HEIGHT, surface_texture)?
+        Pixels::new(MODEL_WIDTH as u32, MODEL_HEIGHT as u32, surface_texture)?
     };
     let mut world = World::new();
     let mut frame_time = 0.16;
@@ -126,7 +126,6 @@ fn main() -> Result<(), Error> {
 }
 
 struct World {
-    pub fast_forward: bool,
     pub frames: usize,
     pub gradient: ColorGradient,
     pub is_left_mouse_button_held_down: bool,
@@ -140,7 +139,6 @@ struct World {
 impl World {
     fn new() -> Self {
         Self {
-            fast_forward: false,
             frames: 0,
             gradient: gradient_presets::new_rainbow(),
             is_left_mouse_button_held_down: false,
