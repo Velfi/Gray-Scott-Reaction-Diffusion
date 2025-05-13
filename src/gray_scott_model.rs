@@ -11,6 +11,7 @@ struct SimulationParams {
     delta_v: f32,
     width: u32,
     height: u32,
+    nutrient_pattern: u32, // 0 = uniform, 1 = checkerboard, etc.
 }
 
 #[repr(C)]
@@ -28,6 +29,7 @@ pub struct ReactionDiffusionSystem {
     kill_rate: f32,
     delta_u: f32,
     delta_v: f32,
+    nutrient_pattern: u32,
     uvs: Vec<UVPair>,
 
     // GPU resources
@@ -129,6 +131,7 @@ impl ReactionDiffusionSystem {
             delta_v,
             width: width as u32,
             height: height as u32,
+            nutrient_pattern: 0, // Start with uniform pattern
         };
 
         let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -241,6 +244,7 @@ impl ReactionDiffusionSystem {
             kill_rate,
             delta_u,
             delta_v,
+            nutrient_pattern: 0,
             uvs,
             device,
             queue,
@@ -421,6 +425,7 @@ impl ReactionDiffusionSystem {
             delta_v: self.delta_v,
             width: self.width as u32,
             height: self.height as u32,
+            nutrient_pattern: self.nutrient_pattern,
         };
 
         let staging_buffer = self
@@ -503,5 +508,39 @@ impl ReactionDiffusionSystem {
                     },
                 ],
             });
+    }
+
+    pub fn set_nutrient_pattern(&mut self, pattern_index: u32) {
+        let params = SimulationParams {
+            feed_rate: self.feed_rate,
+            kill_rate: self.kill_rate,
+            delta_u: self.delta_u,
+            delta_v: self.delta_v,
+            width: self.width as u32,
+            height: self.height as u32,
+            nutrient_pattern: pattern_index,
+        };
+
+        let staging_buffer = self
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Staging Buffer"),
+                contents: bytemuck::cast_slice(&[params]),
+                usage: wgpu::BufferUsages::COPY_SRC,
+            });
+
+        let mut encoder = self
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("Update Nutrient Pattern Encoder"),
+            });
+        encoder.copy_buffer_to_buffer(
+            &staging_buffer,
+            0,
+            &self.params_buffer,
+            0,
+            std::mem::size_of::<SimulationParams>() as u64,
+        );
+        self.queue.submit(Some(encoder.finish()));
     }
 }

@@ -5,6 +5,7 @@ struct SimulationParams {
     delta_v: f32,
     width: u32,
     height: u32,
+    nutrient_pattern: u32,
 }
 
 struct UVPair {
@@ -56,6 +57,54 @@ fn get_laplacian(x: i32, y: i32) -> vec2f {
     return laplacian;
 }
 
+fn get_nutrient_factor(x: i32, y: i32) -> f32 {
+    // Calculate normalized coordinates
+    let nx = f32(x) / f32(params.width);
+    let ny = f32(y) / f32(params.height);
+    
+    switch (params.nutrient_pattern) {
+        case 0u: { // Uniform
+            return 1.0;
+        }
+        case 1u: { // Checkerboard
+            let stripe_width = 0.1; // 10% of width/height
+            let is_stripe = (nx / stripe_width + ny / stripe_width) % 2.0 < 1.0;
+            return select(0.5, 1.0, is_stripe);
+        }
+        case 2u: { // Diagonal gradient
+            return (nx + ny) / 2.0;
+        }
+        case 3u: { // Radial gradient
+            let center_x = 0.5;
+            let center_y = 0.5;
+            let dx = nx - center_x;
+            let dy = ny - center_y;
+            let distance = sqrt(dx * dx + dy * dy);
+            return 1.0 - distance;
+        }
+        case 4u: { // Vertical stripes
+            let stripe_width = 0.1;
+            let is_stripe = (nx / stripe_width) % 2.0 < 1.0;
+            return select(0.5, 1.0, is_stripe);
+        }
+        case 5u: { // Horizontal stripes
+            let stripe_width = 0.1;
+            let is_stripe = (ny / stripe_width) % 2.0 < 1.0;
+            return select(0.5, 1.0, is_stripe);
+        }
+        case 6u: { // Noise
+            // Convert to u32 before multiplication to avoid type mismatch
+            let x_u = u32(x);
+            let y_u = u32(y);
+            let seed = f32(x_u * 73856093u + y_u * 19349663u);
+            return 0.5 + 0.5 * fract(sin(seed) * 43758.5453);
+        }
+        default: {
+            return 1.0;
+        }
+    }
+}
+
 @compute @workgroup_size(8, 8)
 fn main(@builtin(global_invocation_id) global_id: vec3u) {
     let x = i32(global_id.x);
@@ -70,9 +119,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3u) {
     let reaction_rate = uv.u * uv.v * uv.v;
     
     let laplacian = get_laplacian(x, y);
+    let nutrient_factor = get_nutrient_factor(x, y);
     
-    let delta_u = params.delta_u * laplacian.x - reaction_rate + params.feed_rate * (1.0 - uv.u);
-    let delta_v = params.delta_v * laplacian.y + reaction_rate - (params.kill_rate + params.feed_rate) * uv.v;
+    // Incorporate nutrient factor into the feed rate
+    let effective_feed_rate = params.feed_rate * nutrient_factor;
+    
+    let delta_u = params.delta_u * laplacian.x - reaction_rate + effective_feed_rate * (1.0 - uv.u);
+    let delta_v = params.delta_v * laplacian.y + reaction_rate - (params.kill_rate + effective_feed_rate) * uv.v;
     
     let new_u = clamp(uv.u + delta_u, 0.0, 1.0);
     let new_v = clamp(uv.v + delta_v, 0.0, 1.0);

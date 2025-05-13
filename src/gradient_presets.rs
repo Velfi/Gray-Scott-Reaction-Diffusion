@@ -36,3 +36,30 @@ pub fn new_protanopia_friendly() -> ColorGradient {
 
     gradient
 }
+
+pub fn new_magma() -> ColorGradient {
+    let mut gradient = ColorGradient::from_colors([0, 0, 0, 255], [255, 255, 255, 255]);
+
+    // Magma color scheme from dark to light
+    gradient.add_color_at_t(0.20, [0, 0, 4, 255]); // Dark blue-black
+    gradient.add_color_at_t(0.40, [48, 0, 89, 255]); // Deep purple
+    gradient.add_color_at_t(0.60, [189, 0, 38, 255]); // Deep red
+    gradient.add_color_at_t(0.80, [251, 106, 74, 255]); // Orange-red
+    gradient.add_color_at_t(0.90, [252, 197, 192, 255]); // Light pink
+    gradient.add_color_at_t(0.95, [255, 255, 255, 255]); // White
+
+    gradient
+}
+
+pub fn new_monochrome() -> ColorGradient {
+    let mut gradient = ColorGradient::from_colors([0, 0, 0, 255], [255, 255, 255, 255]);
+
+    // Simple black to white gradient
+    gradient.add_color_at_t(0.20, [51, 51, 51, 255]); // Dark gray
+    gradient.add_color_at_t(0.40, [102, 102, 102, 255]); // Medium gray
+    gradient.add_color_at_t(0.60, [153, 153, 153, 255]); // Light gray
+    gradient.add_color_at_t(0.80, [204, 204, 204, 255]); // Very light gray
+    gradient.add_color_at_t(0.90, [255, 255, 255, 255]); // White
+
+    gradient
+}

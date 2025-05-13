@@ -5,24 +5,28 @@ Reaction–diffusion systems are mathematical models which correspond to several
 If that sounds like gibberish, just know that it's an algorithm for modeling the processes that create lots of natural patterns.
 For more cool patterns in nature, [see here][patterns-in-nature].
 
-![alt text][example_soliton]
-![alt text][example_brain_coral]
+![Example 1][example_1]
+![Example 2][example_2]
 
 ## Running The Visualizer
 
-You'll need to have Rust and `cargo` installed. Then, run `cargo run --release` in you terminal of choice. Click and drag around to seed the reaction and interact with it.
+You'll need to have Rust and `cargo` installed. Then, run `cargo run --release` in your terminal of choice.
 
-## Seeing Different Reactions
+## Controls
 
-Right now, changing the default interaction is somewhat inconvenient, but I've provided a few presets that you can manually enter. Just update line 28 in `main.rs`
+- **Left Mouse Button**: Click and drag to seed the reaction
+- **Right Mouse Button**: Click and drag to interact with the reaction
+- **C**: Clear the screen
+- **N**: Fill the screen with noise
+- **G**: Cycle through different color gradients
+- **P**: Cycle through different reaction presets
+- **U**: Cycle through different nutrient patterns
+- **? or \**: Toggle help overlay
+- **ESC**: Exit the application
 
-```rust
-// src/main.rs:28
-// Change the preset to anything exported from `model_presets`
-const CURRENT_MODEL: (f32, f32) = model_presets::SOLITON_COLLAPSE;
-```
+## Reaction Presets
 
-The options available are:
+The simulation comes with several built-in presets that create different patterns:
 
 - `BRAIN_CORAL`
 - `FINGERPRINT`
@@ -33,9 +37,21 @@ The options available are:
 - `UNDULATING`
 - `WORMS`
 
-The simulation runs pretty slowly right now because of the inefficient way I'm calculating it. I hope to improve on this implementation by rewriting things in GLSL someday.
+## Nutrient Patterns
+
+The simulation also includes various nutrient patterns that affect how the reaction spreads:
+
+- Uniform
+- Checkerboard
+- Diagonal Gradient
+- Radial Gradient
+- Vertical Stripes
+- Horizontal Stripes
+- Noise
+
+The simulation now runs efficiently using parallel processing with Rayon. The window title shows the current preset name, feed rate (f), kill rate (k), nutrient pattern, and FPS.
 
 [wikipedia]: https://en.wikipedia.org/wiki/Reaction%E2%80%93diffusion_system
 [patterns-in-nature]: https://en.wikipedia.org/wiki/Patterns_in_nature
-[example_soliton]: /example_soliton.png "An example of the 'Soliton Collapse' setting"
-[example_brain_coral]: /example_brain_coral.png "An example of the 'Brain Coral' setting"
+[example_1]: /example_1.png "Example of the Gray-Scott Reaction Diffusion simulation"
+[example_2]: /example_2.png "Another example of the Gray-Scott Reaction Diffusion simulation"

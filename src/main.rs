@@ -15,6 +15,7 @@ use gray_scott_model::ReactionDiffusionSystem;
 use log::{error, trace};
 use nutrient_presets::NutrientPattern;
 use pixels::{Pixels, SurfaceTexture};
+use rand::SeedableRng;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rayon::slice::ParallelSliceMut;
 use std::time::Instant;
@@ -272,11 +273,13 @@ impl World {
     }
 
     fn cycle_gradient(&mut self) {
-        self.current_gradient_index = (self.current_gradient_index + 1) % 3;
+        self.current_gradient_index = (self.current_gradient_index + 1) % 5;
         self.gradient = match self.current_gradient_index {
             0 => gradient_presets::new_rainbow(),
             1 => gradient_presets::new_pink_and_blue(),
             2 => gradient_presets::new_protanopia_friendly(),
+            3 => gradient_presets::new_magma(),
+            4 => gradient_presets::new_monochrome(),
             _ => unreachable!(),
         };
     }
@@ -300,6 +303,8 @@ impl World {
     fn cycle_nutrient_pattern(&mut self) {
         self.current_nutrient_pattern_index =
             (self.current_nutrient_pattern_index + 1) % self.nutrient_patterns.len();
+        self.reaction_diffusion_system
+            .set_nutrient_pattern(self.current_nutrient_pattern_index as u32);
     }
 
     fn get_current_preset_name(&self) -> &'static str {
@@ -360,9 +365,11 @@ impl World {
                             && ny >= 0
                             && ny < self.reaction_diffusion_system.height as isize
                         {
-                            // Create a gradient effect based on distance from center
-                            let distance = ((dx * dx + dy * dy) as f32).sqrt();
-                            let factor = (1.0 - (distance / radius as f32)).max(0.0);
+                            // Calculate normalized distance from center (0 to 1)
+                            let distance = ((dx * dx + dy * dy) as f32).sqrt() / radius as f32;
+
+                            // Hard edge brush - constant value within radius
+                            let factor = if distance < 1.0 { 1.0 } else { 0.0 };
 
                             // Apply nutrient pattern
                             let nutrient_factor = (self.nutrient_patterns
