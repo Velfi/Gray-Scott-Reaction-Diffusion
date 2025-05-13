@@ -23,3 +23,16 @@ pub fn new_rainbow() -> ColorGradient {
 
     gradient
 }
+
+pub fn new_protanopia_friendly() -> ColorGradient {
+    let mut gradient = ColorGradient::from_colors([0, 0, 0, 255], [255, 255, 255, 255]);
+
+    // Using colors that are distinguishable for people with protanopia
+    gradient.add_color_at_t(0.20, [0, 0, 0, 255]); // Black
+    gradient.add_color_at_t(0.40, [0, 0, 255, 255]); // Blue
+    gradient.add_color_at_t(0.60, [255, 255, 0, 255]); // Yellow
+    gradient.add_color_at_t(0.80, [255, 0, 255, 255]); // Magenta
+    gradient.add_color_at_t(0.90, [255, 255, 255, 255]); // White
+
+    gradient
+}
