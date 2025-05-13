@@ -11,13 +11,14 @@ use circular_queue::CircularQueue;
 use gradient::ColorGradient;
 use gray_scott_model::ReactionDiffusionSystem;
 use log::{error, info, trace};
-use pixels::{Error, Pixels, SurfaceTexture};
+use pixels::{Pixels, SurfaceTexture};
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use rayon::slice::ParallelSliceMut;
 use std::time::Instant;
 use winit::dpi::LogicalSize;
-use winit::event::{Event, VirtualKeyCode};
-use winit::event_loop::{ControlFlow, EventLoop};
+use winit::event::{Event, MouseButton};
+use winit::event_loop::EventLoop;
+use winit::keyboard::KeyCode;
 use winit::window::WindowBuilder;
 use winit_input_helper::WinitInputHelper;
 
@@ -28,25 +29,37 @@ const MODEL_HEIGHT: usize = 270;
 const MODEL_WIDTH: usize = (MODEL_HEIGHT as f32 * ASPECT_RATIO) as usize;
 const CURRENT_MODEL: (f32, f32) = model_presets::SOLITON_COLLAPSE;
 
-fn main() -> Result<(), Error> {
+fn main() {
     let _ = dotenv::dotenv();
     env_logger::init();
-    let event_loop = EventLoop::new();
+    let event_loop = EventLoop::new().unwrap();
     let mut input = WinitInputHelper::new();
     let window = {
         let size = LogicalSize::new(WINDOW_WIDTH as f64, WINDOW_HEIGHT as f64);
-        WindowBuilder::new()
+        match WindowBuilder::new()
             .with_title("Gray Scott Reaction Diffusion")
             .with_inner_size(size)
             .with_min_inner_size(size)
             .build(&event_loop)
-            .unwrap()
+        {
+            Ok(w) => w,
+            Err(e) => {
+                eprintln!("Failed to create window: {}", e);
+                return;
+            }
+        }
     };
 
     let mut pixels = {
         let window_size = window.inner_size();
         let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, &window);
-        Pixels::new(MODEL_WIDTH as u32, MODEL_HEIGHT as u32, surface_texture)?
+        match Pixels::new(MODEL_WIDTH as u32, MODEL_HEIGHT as u32, surface_texture) {
+            Ok(p) => p,
+            Err(e) => {
+                eprintln!("Failed to create pixels surface: {}", e);
+                return;
+            }
+        }
     };
     let mut world = World::new();
     let mut frame_time = 0.16;
@@ -56,16 +69,20 @@ fn main() -> Result<(), Error> {
     let mut fps_values = CircularQueue::with_capacity(5);
     let mut time_of_last_fps_counter_update = Instant::now();
 
-    event_loop.run(move |event, _, control_flow| {
+    let _ = event_loop.run(move |event, target| {
         // Draw the current frame
-        if let Event::RedrawRequested(_) = event {
-            world.draw(pixels.get_frame());
+        if let Event::WindowEvent {
+            event: winit::event::WindowEvent::RedrawRequested,
+            ..
+        } = event
+        {
+            world.draw(pixels.frame_mut());
             if pixels
                 .render()
                 .map_err(|e| error!("pixels.render() failed: {}", e))
                 .is_err()
             {
-                *control_flow = ControlFlow::Exit;
+                target.exit();
                 return;
             }
         }
@@ -73,34 +90,34 @@ fn main() -> Result<(), Error> {
         // Handle input events
         if input.update(&event) {
             // Close events
-            if input.key_pressed(VirtualKeyCode::Escape) || input.quit() {
-                *control_flow = ControlFlow::Exit;
+            if input.key_pressed(KeyCode::Escape) || input.close_requested() {
+                target.exit();
                 return;
             }
 
-            if input.mouse_pressed(0) {
+            if input.mouse_pressed(MouseButton::Left) {
                 trace!("Pressed LMB");
                 world.is_left_mouse_button_held_down = true
-            } else if input.mouse_released(0) {
+            } else if input.mouse_released(MouseButton::Left) {
                 trace!("Released LMB");
                 world.is_left_mouse_button_held_down = false
             }
 
-            if input.mouse_pressed(1) {
+            if input.mouse_pressed(MouseButton::Right) {
                 trace!("Pressed RMB");
                 world.is_right_mouse_button_held_down = true
-            } else if input.mouse_released(1) {
+            } else if input.mouse_released(MouseButton::Right) {
                 trace!("Released RMB");
                 world.is_right_mouse_button_held_down = false
             }
 
-            if let Some(xy) = input.mouse() {
-                world.mouse_xy = xy;
+            if let Some((x, y)) = input.cursor() {
+                world.mouse_xy = (x, y);
             }
 
             // Resize the window
             if let Some(size) = input.window_resized() {
-                pixels.resize_surface(size.width, size.height);
+                let _ = pixels.resize_surface(size.width, size.height);
             }
 
             // Update internal state and request a redraw
@@ -126,24 +143,19 @@ fn main() -> Result<(), Error> {
 }
 
 struct World {
-    pub frames: usize,
     pub gradient: ColorGradient,
     pub is_left_mouse_button_held_down: bool,
     pub is_right_mouse_button_held_down: bool,
-    pub previous_frame_start_time: Instant,
     pub reaction_diffusion_system: ReactionDiffusionSystem,
     pub mouse_xy: (f32, f32),
-    pub previous_mouse_xy: Option<(f32, f32)>,
 }
 
 impl World {
     fn new() -> Self {
         Self {
-            frames: 0,
             gradient: gradient_presets::new_rainbow(),
             is_left_mouse_button_held_down: false,
             is_right_mouse_button_held_down: false,
-            previous_frame_start_time: Instant::now(),
             reaction_diffusion_system: ReactionDiffusionSystem::new(
                 MODEL_WIDTH,
                 MODEL_HEIGHT,
@@ -153,7 +165,6 @@ impl World {
                 0.5,
             ),
             mouse_xy: (0.0, 0.0),
-            previous_mouse_xy: None,
         }
     }
 }
@@ -161,11 +172,16 @@ impl World {
 impl World {
     fn update(&mut self, pixels: &Pixels, frame_time: f32) {
         if self.is_left_mouse_button_held_down {
-            if let Ok((x, y)) = pixels
-                .window_pos_to_pixel(self.mouse_xy)
-                .map(|(x, y)| (x as isize, y as isize))
-            {
-                self.reaction_diffusion_system.set(x, y, (0.0, 0.99))
+            if let Ok((x, y)) = pixels.window_pos_to_pixel(self.mouse_xy) {
+                let x = x as isize;
+                let y = y as isize;
+                if x >= 0
+                    && x < self.reaction_diffusion_system.width as isize
+                    && y >= 0
+                    && y < self.reaction_diffusion_system.height as isize
+                {
+                    self.reaction_diffusion_system.set(x, y, (0.0, 0.99));
+                }
             }
         }
 

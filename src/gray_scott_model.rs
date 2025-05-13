@@ -107,19 +107,6 @@ impl ReactionDiffusionSystem {
     }
 
     pub fn update(&mut self, mut _delta_t: f32) {
-        // delta_t *= 100.0;
-        // trace!("updating reaction with total delta_t of {:.02?}", delta_t);
-        // The reaction goes nuts if delta_t is greater than 1, so if we need to go fast then
-        // it has to be calculated multiple times in steps
-        // while delta_t > 1.0 {
-        //     delta_t -= 1.0;
-        //     trace!(
-        //         "running reaction with fractional delta_t of {:.02?}",
-        //         delta_t
-        //     );
-        //     self.reaction(1.0)
-        // }
-
         self.reaction(1.0)
     }
 
