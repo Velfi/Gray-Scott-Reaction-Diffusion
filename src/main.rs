@@ -95,7 +95,7 @@ fn main() {
             }
 
             // Keyboard controls
-            if input.key_pressed(KeyCode::KeyC) {
+            if input.key_pressed(KeyCode::KeyX) {
                 world.clear_screen();
             }
             if input.key_pressed(KeyCode::KeyN) {
@@ -128,6 +128,30 @@ fn main() {
                 world
                     .reaction_diffusion_system
                     .toggle_nutrient_pattern_reversal();
+            }
+
+            // Handle arrow keys for custom preset
+            const RATE_DELTA: f32 = 0.001;
+            const RATE_DELTA_FINE: f32 = 0.0001;
+            let shift_held =
+                input.key_held(KeyCode::ShiftLeft) || input.key_held(KeyCode::ShiftRight);
+            let delta = if shift_held {
+                RATE_DELTA_FINE
+            } else {
+                RATE_DELTA
+            };
+
+            if input.key_held(KeyCode::ArrowLeft) {
+                world.update_custom_rates(-delta, 0.0);
+            }
+            if input.key_held(KeyCode::ArrowRight) {
+                world.update_custom_rates(delta, 0.0);
+            }
+            if input.key_held(KeyCode::ArrowUp) {
+                world.update_custom_rates(0.0, delta);
+            }
+            if input.key_held(KeyCode::ArrowDown) {
+                world.update_custom_rates(0.0, -delta);
             }
 
             // Resize the window
@@ -179,6 +203,8 @@ pub struct World {
     pub lut_manager: LutManager,
     pub current_lut_index: usize,
     pub is_current_lut_reversed: bool,
+    pub custom_feed_rate: f32,
+    pub custom_kill_rate: f32,
 }
 
 impl World {
@@ -194,6 +220,7 @@ impl World {
             5 => model_presets::U_SKATE_WORLD,
             6 => model_presets::UNDULATING,
             7 => model_presets::WORMS,
+            8 => model_presets::CUSTOM,
             _ => unreachable!(),
         };
 
@@ -236,6 +263,8 @@ impl World {
             lut_manager,
             current_lut_index,
             is_current_lut_reversed,
+            custom_feed_rate: model_presets::CUSTOM.0,
+            custom_kill_rate: model_presets::CUSTOM.1,
         };
 
         // Fill with initial random noise
@@ -281,12 +310,12 @@ impl World {
     fn cycle_preset(&mut self, reverse: bool) {
         if reverse {
             self.current_preset_index = if self.current_preset_index == 0 {
-                7
+                8
             } else {
                 self.current_preset_index - 1
             };
         } else {
-            self.current_preset_index = (self.current_preset_index + 1) % 8;
+            self.current_preset_index = (self.current_preset_index + 1) % 9;
         }
 
         let (feed_rate, kill_rate) = match self.current_preset_index {
@@ -298,6 +327,7 @@ impl World {
             5 => model_presets::U_SKATE_WORLD,
             6 => model_presets::UNDULATING,
             7 => model_presets::WORMS,
+            8 => (self.custom_feed_rate, self.custom_kill_rate),
             _ => unreachable!(),
         };
         self.reaction_diffusion_system
@@ -373,6 +403,7 @@ impl World {
             5 => "U-Skate World",
             6 => "Undulating",
             7 => "Worms",
+            8 => "Custom",
             _ => unreachable!(),
         }
     }
@@ -387,6 +418,7 @@ impl World {
             5 => model_presets::U_SKATE_WORLD,
             6 => model_presets::UNDULATING,
             7 => model_presets::WORMS,
+            8 => (self.custom_feed_rate, self.custom_kill_rate),
             _ => unreachable!(),
         }
     }
@@ -452,13 +484,14 @@ impl World {
                 "Controls:
 Left Mouse Button: Click and drag to seed the reaction
 Right Mouse Button: Click and drag to interact with the reaction
-C: Clear the screen
+X: Clear the screen
 N: Fill the screen with noise
 G: Cycle through different color gradients (hold SHIFT to cycle backwards)
 P: Cycle through different reaction presets (hold SHIFT to cycle backwards)
 U: Cycle through different nutrient patterns (hold SHIFT to cycle backwards)
 F: Reverse current color gradient
 Y: Reverse current nutrient pattern
+Arrow Keys: Adjust feed rate (left/right) and kill rate (up/down) in Custom preset (hold SHIFT for finer control)
 ? or \\: Toggle help overlay
 ESC: Exit the application
 
@@ -518,5 +551,14 @@ Current Nutrient Pattern: {} {}",
             self.current_nutrient_pattern.as_u32(),
             self.is_current_nutrient_pattern_reversed,
         );
+    }
+
+    fn update_custom_rates(&mut self, feed_delta: f32, kill_delta: f32) {
+        if self.current_preset_index == 8 {
+            self.custom_feed_rate = (self.custom_feed_rate + feed_delta).clamp(0.0, 0.1);
+            self.custom_kill_rate = (self.custom_kill_rate + kill_delta).clamp(0.0, 0.1);
+            self.reaction_diffusion_system
+                .update_rates(self.custom_feed_rate, self.custom_kill_rate);
+        }
     }
 }

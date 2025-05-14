@@ -18,11 +18,12 @@ You'll need to have Rust and `cargo` installed. Then, run `cargo run --release` 
 
 - **Left Mouse Button**: Click and drag to seed the reaction
 - **Right Mouse Button**: Click and drag to interact with the reaction
-- **C**: Clear the screen
+- **X**: Clear the screen
 - **N**: Fill the screen with noise
 - **G**: Cycle through different color gradients (hold SHIFT to cycle backwards)
 - **P**: Cycle through different reaction presets (hold SHIFT to cycle backwards)
 - **U**: Cycle through different nutrient patterns (hold SHIFT to cycle backwards)
+- **Arrow Keys**: Adjust feed rate (left/right) and kill rate (up/down) in Custom preset (hold SHIFT for finer control)
 - **? or \\**: Toggle help overlay
 - **ESC**: Exit the application
 
@@ -38,6 +39,7 @@ The simulation comes with several built-in presets that create different pattern
 - `U_SKATE_WORLD`
 - `UNDULATING`
 - `WORMS`
+- `CUSTOM` (Interactive: use arrow keys to adjust feed and kill rates, hold SHIFT for finer control)
 
 ## Nutrient Patterns
 
@@ -57,3 +59,5 @@ The simulation now runs efficiently using parallel processing with Rayon. The wi
 [patterns-in-nature]: https://en.wikipedia.org/wiki/Patterns_in_nature
 [example_1]: /example_1.png "Example of the Gray-Scott Reaction Diffusion simulation"
 [example_2]: /example_2.png "Another example of the Gray-Scott Reaction Diffusion simulation"
+[example_3]: /example_3.png "Third example of the Gray-Scott Reaction Diffusion simulation"
+[example_4]: /example_4.png "Fourth example of the Gray-Scott Reaction Diffusion simulation"
