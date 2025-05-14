@@ -55,8 +55,6 @@ The simulation also includes various nutrient patterns that affect how the react
 - Horizontal Stripes
 - Noise
 
-The simulation now runs efficiently using parallel processing with Rayon. The window title shows the current preset name, feed rate (f), kill rate (k), nutrient pattern, and FPS.
-
 [wikipedia]: https://en.wikipedia.org/wiki/Reaction%E2%80%93diffusion_system
 [patterns-in-nature]: https://en.wikipedia.org/wiki/Patterns_in_nature
 [example_1]: /example_1.png "Example of the Gray-Scott Reaction Diffusion simulation"
