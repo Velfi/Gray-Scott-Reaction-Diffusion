@@ -13,19 +13,36 @@ use winit::keyboard::KeyCode;
 use winit::window::{Window, WindowBuilder};
 use winit_input_helper::WinitInputHelper;
 
-const WINDOW_WIDTH: u32 = 1650;
-const WINDOW_HEIGHT: u32 = 1050;
-const ASPECT_RATIO: f32 = WINDOW_WIDTH as f32 / WINDOW_HEIGHT as f32;
-const MODEL_HEIGHT: usize = WINDOW_HEIGHT as usize;
-const MODEL_WIDTH: usize = (MODEL_HEIGHT as f32 * ASPECT_RATIO) as usize;
+fn calculate_window_dimensions(monitor: &winit::monitor::MonitorHandle) -> (u32, u32) {
+    // Get logical monitor size
+    let physical_size = monitor.size();
+    let scale_factor = monitor.scale_factor();
+    let logical_size = LogicalSize::new(
+        physical_size.width as f64 / scale_factor,
+        physical_size.height as f64 / scale_factor,
+    );
+
+    // Use full monitor dimensions
+    (logical_size.width as u32, logical_size.height as u32)
+}
 
 fn main() {
     let _ = dotenv::dotenv();
     env_logger::init();
     let event_loop = EventLoop::new().unwrap();
     let mut input = WinitInputHelper::new();
+
+    // Get the primary monitor's dimensions
+    let monitor = event_loop
+        .primary_monitor()
+        .expect("No primary monitor found");
+    let (window_width, window_height) = calculate_window_dimensions(&monitor);
+    let aspect_ratio = window_width as f32 / window_height as f32;
+    let model_height = window_height as usize;
+    let model_width = (model_height as f32 * aspect_ratio) as usize;
+
     let window = {
-        let size = LogicalSize::new(WINDOW_WIDTH as f64, WINDOW_HEIGHT as f64);
+        let size = LogicalSize::new(window_width as f64, window_height as f64);
         match WindowBuilder::new()
             .with_title("Gray Scott Reaction Diffusion")
             .with_inner_size(size)
@@ -43,12 +60,12 @@ fn main() {
     // Create the renderer
     let mut renderer = futures::executor::block_on(Renderer::new(
         &window,
-        MODEL_WIDTH as u32,
-        MODEL_HEIGHT as u32,
+        model_width as u32,
+        model_height as u32,
     ));
 
     // Create the world asynchronously
-    let mut world = futures::executor::block_on(World::new());
+    let mut world = futures::executor::block_on(World::new(model_width, model_height));
 
     // Initialize the selected LUT
     let available_luts = world.lut_manager.get_available_luts();
@@ -88,6 +105,13 @@ fn main() {
                 world.is_left_mouse_button_held_down = true
             } else if input.mouse_released(MouseButton::Left) {
                 world.is_left_mouse_button_held_down = false
+            }
+
+            // Handle right mouse button for interaction
+            if input.mouse_pressed(MouseButton::Right) {
+                world.is_right_mouse_button_held_down = true
+            } else if input.mouse_released(MouseButton::Right) {
+                world.is_right_mouse_button_held_down = false
             }
 
             if let Some((x, y)) = input.cursor() {
@@ -180,7 +204,7 @@ fn main() {
                     feed_rate,
                     kill_rate,
                     world.get_current_nutrient_pattern_name(),
-                    world.get_current_lut_name(),
+                    world.get_current_lut_name(&renderer),
                     avg_fps * 30.0
                 ));
             }
@@ -190,6 +214,7 @@ fn main() {
 
 pub struct World {
     pub is_left_mouse_button_held_down: bool,
+    pub is_right_mouse_button_held_down: bool,
     pub reaction_diffusion_system: ReactionDiffusionSystem,
     /// Physical mouse coordinates in window space (pixels).
     /// x ranges from 0 to window_width, y ranges from 0 to window_height.
@@ -202,13 +227,12 @@ pub struct World {
     pub font: Font,
     pub lut_manager: LutManager,
     pub current_lut_index: usize,
-    pub is_current_lut_reversed: bool,
     pub custom_feed_rate: f32,
     pub custom_kill_rate: f32,
 }
 
 impl World {
-    async fn new() -> Self {
+    async fn new(model_width: usize, model_height: usize) -> Self {
         // Set initial preset to Undulating
         let current_preset_index = 6;
         let (feed_rate, kill_rate) = match current_preset_index {
@@ -240,14 +264,14 @@ impl World {
             .iter()
             .position(|name| name == "MATPLOTLIB_gist_ncar_r")
             .unwrap_or(0);
-        let is_current_lut_reversed = false;
 
         // Create the world instance
         let mut world = Self {
             is_left_mouse_button_held_down: false,
+            is_right_mouse_button_held_down: false,
             reaction_diffusion_system: ReactionDiffusionSystem::new(
-                MODEL_WIDTH,
-                MODEL_HEIGHT,
+                model_width,
+                model_height,
                 feed_rate,
                 kill_rate,
                 1.0,
@@ -262,7 +286,6 @@ impl World {
             font,
             lut_manager,
             current_lut_index,
-            is_current_lut_reversed,
             custom_feed_rate: model_presets::CUSTOM.0,
             custom_kill_rate: model_presets::CUSTOM.1,
         };
@@ -373,8 +396,6 @@ impl World {
                 self.current_lut_index = (self.current_lut_index + 1) % len;
             }
 
-            // Reset the reversed state when changing LUTs
-            self.is_current_lut_reversed = false;
             if let Ok(lut_data) = self
                 .lut_manager
                 .load_lut(&available_luts[self.current_lut_index])
@@ -384,12 +405,16 @@ impl World {
         }
     }
 
-    fn get_current_lut_name(&self) -> String {
+    fn get_current_lut_name(&self, renderer: &Renderer) -> String {
         let available_luts = self.lut_manager.get_available_luts();
         if available_luts.is_empty() {
             "No LUTs available".to_string()
         } else {
-            available_luts[self.current_lut_index].clone()
+            let mut name = available_luts[self.current_lut_index].clone();
+            if renderer.is_lut_reversed() {
+                name += " (Reversed)";
+            }
+            name
         }
     }
 
@@ -428,43 +453,56 @@ impl World {
     }
 
     fn update(&mut self, window: &Window) {
-        if self.is_left_mouse_button_held_down {
-            let physical_window_width = window.inner_size().width as f32;
-            let physical_window_height = window.inner_size().height as f32;
+        let physical_window_width = window.inner_size().width as f32;
+        let physical_window_height = window.inner_size().height as f32;
 
-            // Convert physical mouse coordinates to simulation coordinates
-            let sim_x = ((self.mouse_xy.0 / physical_window_width) * MODEL_WIDTH as f32)
-                .clamp(0.0, MODEL_WIDTH as f32 - 1.0) as isize;
+        // Convert physical mouse coordinates to simulation coordinates
+        let sim_x = ((self.mouse_xy.0 / physical_window_width)
+            * self.reaction_diffusion_system.width as f32)
+            .clamp(0.0, self.reaction_diffusion_system.width as f32 - 1.0)
+            as isize;
 
-            // Invert Y coordinate (window origin is top-left, so we need to flip Y)
-            let sim_y = ((1.0 - (self.mouse_xy.1 / physical_window_height)) * MODEL_HEIGHT as f32)
-                .clamp(0.0, MODEL_HEIGHT as f32 - 1.0) as isize;
+        // Invert Y coordinate (window origin is top-left, so we need to flip Y)
+        let sim_y = ((1.0 - (self.mouse_xy.1 / physical_window_height))
+            * self.reaction_diffusion_system.height as f32)
+            .clamp(0.0, self.reaction_diffusion_system.height as f32 - 1.0)
+            as isize;
 
-            // Create a small area of effect
-            let radius = 5;
-            for dy in -radius..=radius {
-                for dx in -radius..=radius {
-                    let nx = sim_x + dx;
-                    let ny = sim_y + dy;
-                    if nx >= 0
-                        && nx < self.reaction_diffusion_system.width as isize
-                        && ny >= 0
-                        && ny < self.reaction_diffusion_system.height as isize
-                    {
-                        // Calculate normalized distance from center (0 to 1)
-                        let distance = ((dx * dx + dy * dy) as f32).sqrt() / radius as f32;
+        // Create a small area of effect
+        let radius = 5;
+        for dy in -radius..=radius {
+            for dx in -radius..=radius {
+                let nx = sim_x + dx;
+                let ny = sim_y + dy;
+                if nx >= 0
+                    && nx < self.reaction_diffusion_system.width as isize
+                    && ny >= 0
+                    && ny < self.reaction_diffusion_system.height as isize
+                {
+                    // Calculate normalized distance from center (0 to 1)
+                    let distance = ((dx * dx + dy * dy) as f32).sqrt() / radius as f32;
 
-                        // Hard edge brush - constant value within radius
-                        let factor = if distance < 1.0 { 1.0 } else { 0.0 };
+                    // Smooth circular falloff
+                    let factor = if distance < 1.0 {
+                        (1.0 - distance * distance).powf(2.0)
+                    } else {
+                        0.0
+                    };
 
-                        // Apply nutrient pattern
-                        let nutrient_factor = 1.0; // The shader handles the nutrient pattern now
+                    // Apply nutrient pattern
+                    let nutrient_factor = 1.0; // The shader handles the nutrient pattern now
 
+                    if self.is_left_mouse_button_held_down {
                         self.reaction_diffusion_system.set(
                             nx,
                             ny,
                             (0.5, 0.99 * factor * nutrient_factor),
                         );
+                    } else if self.is_right_mouse_button_held_down {
+                        // Right mouse button creates a void (clears the reaction)
+                        // Interpolate between current state and void state based on factor
+                        self.reaction_diffusion_system
+                            .set(nx, ny, (1.0 * factor, 0.0));
                     }
                 }
             }
@@ -483,7 +521,7 @@ impl World {
             let formatted_help = format!(
                 "Controls:
 Left Mouse Button: Click and drag to seed the reaction
-Right Mouse Button: Click and drag to interact with the reaction
+Right Mouse Button: Click and drag to erase/create voids in the reaction
 X: Clear the screen
 N: Fill the screen with noise
 G: Cycle through different color gradients (hold SHIFT to cycle backwards)
@@ -528,29 +566,7 @@ Current Nutrient Pattern: {} {}",
     }
 
     fn reverse_current_lut(&mut self, renderer: &mut Renderer) {
-        let available_luts = self.lut_manager.get_available_luts();
-        if !available_luts.is_empty() {
-            if let Ok(mut lut_data) = self
-                .lut_manager
-                .load_lut(&available_luts[self.current_lut_index])
-            {
-                // Toggle the reversed state
-                self.is_current_lut_reversed = !self.is_current_lut_reversed;
-                if self.is_current_lut_reversed {
-                    lut_data.reverse();
-                }
-                renderer.update_lut(&lut_data);
-            }
-        }
-    }
-
-    #[allow(dead_code)]
-    fn reverse_current_nutrient_pattern(&mut self) {
-        self.is_current_nutrient_pattern_reversed = !self.is_current_nutrient_pattern_reversed;
-        self.reaction_diffusion_system.set_nutrient_pattern(
-            self.current_nutrient_pattern.as_u32(),
-            self.is_current_nutrient_pattern_reversed,
-        );
+        renderer.set_lut_reversed(!renderer.is_lut_reversed());
     }
 
     fn update_custom_rates(&mut self, feed_delta: f32, kill_delta: f32) {

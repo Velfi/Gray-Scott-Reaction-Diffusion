@@ -4,13 +4,12 @@ use fontdue::Font;
 use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 
-const TEXT_SIZE: f32 = 48.0;
-
 #[repr(C)]
 #[derive(Copy, Clone, Pod, Zeroable)]
 struct Uniforms {
     window_aspect_ratio: f32,
     simulation_aspect_ratio: f32,
+    is_lut_reversed: u32,
 }
 
 pub struct Renderer {
@@ -31,11 +30,15 @@ pub struct Renderer {
     text_bind_group: Option<wgpu::BindGroup>,
     text_bind_group_layout: wgpu::BindGroupLayout,
     text_sampler: wgpu::Sampler,
+    text_size: f32,
 }
 
 impl Renderer {
     pub async fn new(window: &winit::window::Window, width: u32, height: u32) -> Self {
         let size = window.inner_size();
+
+        // Calculate text size as 1/40th of window height
+        let text_size = size.height as f32 / 40.0;
 
         let instance = wgpu::Instance::new(wgpu::InstanceDescriptor {
             backends: wgpu::Backends::all(),
@@ -86,6 +89,7 @@ impl Renderer {
         let uniforms = Uniforms {
             window_aspect_ratio: size.width as f32 / size.height as f32,
             simulation_aspect_ratio: width as f32 / height as f32,
+            is_lut_reversed: 0,
         };
 
         let uniform_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -365,6 +369,7 @@ impl Renderer {
             text_bind_group: None,
             text_bind_group_layout,
             text_sampler,
+            text_size,
         }
     }
 
@@ -376,6 +381,9 @@ impl Renderer {
 
             // Update window aspect ratio while keeping simulation aspect ratio
             self.uniforms.window_aspect_ratio = new_size.width as f32 / new_size.height as f32;
+
+            // Update text size based on new window height
+            self.text_size = new_size.height as f32 / 40.0;
 
             // Update uniform buffer
             self.queue.write_buffer(
@@ -425,21 +433,21 @@ impl Renderer {
 
     pub fn render_text(&mut self, text: &str, font: &Font, window_size: PhysicalSize<u32>) {
         // Calculate text layout
-        let line_height = TEXT_SIZE * 1.5;
+        let line_height = self.text_size * 1.5;
         let lines: Vec<&str> = text.lines().collect();
 
         // Calculate total height of text block
         let total_height = lines.len() as f32 * line_height;
 
         // Add padding around text
-        let padding = TEXT_SIZE * 0.5; // Padding is half the text size
+        let padding = self.text_size * 0.5; // Padding is half the text size
 
         // Calculate the maximum width of all lines for the background box
         let mut max_width = 0.0;
         for line in lines.iter() {
             let mut line_width = 0.0;
             for ch in line.chars() {
-                let metrics = font.metrics(ch, TEXT_SIZE);
+                let metrics = font.metrics(ch, self.text_size);
                 line_width += metrics.advance_width;
             }
             max_width = f32::max(max_width, line_width);
@@ -463,13 +471,13 @@ impl Renderer {
             mip_level_count: 1,
             sample_count: 1,
             dimension: wgpu::TextureDimension::D2,
-            format: wgpu::TextureFormat::R8Unorm,
+            format: wgpu::TextureFormat::Rgba8Unorm,
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
 
-        // Create a buffer to hold the text bitmap
-        let mut text_bitmap = vec![0u8; (texture_width * texture_height) as usize];
+        // Create a buffer to hold the text bitmap (4 bytes per pixel for RGBA)
+        let mut text_bitmap = vec![0u8; (texture_width * texture_height * 4) as usize];
 
         // Draw the background box with padding
         let box_left = (start_x - padding) as usize;
@@ -477,13 +485,17 @@ impl Renderer {
         let box_width = (max_width + padding * 2.0) as usize;
         let box_height = (total_height + padding * 2.0) as usize;
 
-        // Fill the background box area with a value that will create a semi-transparent black background
+        // Fill the background box area with a solid black background
         for y in box_top..box_top + box_height {
             for x in box_left..box_left + box_width {
                 if y < texture_height as usize && x < texture_width as usize {
-                    let idx = y * texture_width as usize + x;
-                    if idx < text_bitmap.len() {
-                        text_bitmap[idx] = 64; // This value will create a semi-transparent background
+                    let idx = (y * texture_width as usize + x) * 4;
+                    if idx + 3 < text_bitmap.len() {
+                        // RGBA: (0,0,0,255) for solid black
+                        text_bitmap[idx] = 0; // R = 0
+                        text_bitmap[idx + 1] = 0; // G = 0
+                        text_bitmap[idx + 2] = 0; // B = 0
+                        text_bitmap[idx + 3] = 255; // A = 255 (fully opaque)
                     }
                 }
             }
@@ -491,22 +503,18 @@ impl Renderer {
 
         // Render each line of text
         for (i, line) in lines.iter().enumerate() {
-            // Calculate baseline y position for this line
-            let baseline_y = start_y + i as f32 * line_height + TEXT_SIZE;
+            let baseline_y = start_y + i as f32 * line_height + self.text_size;
             let mut x_position = start_x;
 
-            // Now render each character
             for ch in line.chars() {
-                let (raster_metrics, bitmap) = font.rasterize(ch, TEXT_SIZE);
-                let font_metrics = font.metrics(ch, TEXT_SIZE);
+                let (raster_metrics, bitmap) = font.rasterize(ch, self.text_size);
+                let font_metrics = font.metrics(ch, self.text_size);
 
-                // Calculate vertical position relative to the baseline
                 let glyph_y = baseline_y + font_metrics.bounds.ymin;
 
                 // Copy bitmap to our texture data
                 for y in 0..raster_metrics.height {
                     for x in 0..raster_metrics.width {
-                        // Get the pixel from the bitmap, flipping the y-coordinate within the character
                         let src_y = raster_metrics.height - 1 - y;
                         let src_idx = src_y * raster_metrics.width + x;
 
@@ -514,11 +522,14 @@ impl Renderer {
                         let dst_y = glyph_y as usize + y;
 
                         if dst_y < texture_height as usize && dst_x < texture_width as usize {
-                            let dst_idx = dst_y * texture_width as usize + dst_x;
-                            if dst_idx < text_bitmap.len() && src_idx < bitmap.len() {
-                                // Only overwrite if the character pixel is not transparent
+                            let dst_idx = (dst_y * texture_width as usize + dst_x) * 4;
+                            if dst_idx + 3 < text_bitmap.len() && src_idx < bitmap.len() {
                                 if bitmap[src_idx] > 0 {
-                                    text_bitmap[dst_idx] = bitmap[src_idx];
+                                    // White text (255,255,255) with alpha from the font rasterizer
+                                    text_bitmap[dst_idx] = 255; // R = 255
+                                    text_bitmap[dst_idx + 1] = 255; // G = 255
+                                    text_bitmap[dst_idx + 2] = 255; // B = 255
+                                    text_bitmap[dst_idx + 3] = bitmap[src_idx]; // A from font
                                 }
                             }
                         }
@@ -540,7 +551,7 @@ impl Renderer {
             &text_bitmap,
             wgpu::ImageDataLayout {
                 offset: 0,
-                bytes_per_row: Some(texture_width),
+                bytes_per_row: Some(texture_width * 4), // 4 bytes per pixel for RGBA
                 rows_per_image: Some(texture_height),
             },
             wgpu::Extent3d {
@@ -627,5 +638,18 @@ impl Renderer {
         self.queue.submit(std::iter::once(encoder.finish()));
 
         Ok(())
+    }
+
+    pub fn set_lut_reversed(&mut self, reversed: bool) {
+        self.uniforms.is_lut_reversed = if reversed { 1 } else { 0 };
+        self.queue.write_buffer(
+            &self.uniform_buffer,
+            0,
+            bytemuck::cast_slice(&[self.uniforms]),
+        );
+    }
+
+    pub fn is_lut_reversed(&self) -> bool {
+        self.uniforms.is_lut_reversed == 1
     }
 }

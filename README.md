@@ -9,6 +9,7 @@ For more cool patterns in nature, [see here][patterns-in-nature].
 ![Example 2][example_2]
 ![Example 3][example_3]
 ![Example 4][example_4]
+![Example 5][example_5]
 
 ## Running The Visualizer
 
@@ -17,7 +18,7 @@ You'll need to have Rust and `cargo` installed. Then, run `cargo run --release` 
 ## Controls
 
 - **Left Mouse Button**: Click and drag to seed the reaction
-- **Right Mouse Button**: Click and drag to interact with the reaction
+- **Right Mouse Button**: Click and drag to erase/create voids in the reaction
 - **X**: Clear the screen
 - **N**: Fill the screen with noise
 - **G**: Cycle through different color gradients (hold SHIFT to cycle backwards)
@@ -61,3 +62,4 @@ The simulation now runs efficiently using parallel processing with Rayon. The wi
 [example_2]: /example_2.png "Another example of the Gray-Scott Reaction Diffusion simulation"
 [example_3]: /example_3.png "Third example of the Gray-Scott Reaction Diffusion simulation"
 [example_4]: /example_4.png "Fourth example of the Gray-Scott Reaction Diffusion simulation"
+[example_5]: /example_5.png "Fifth example of the Gray-Scott Reaction Diffusion simulation"

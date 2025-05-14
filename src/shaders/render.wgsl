@@ -6,6 +6,7 @@ struct VertexOutput {
 struct Uniforms {
     window_aspect_ratio: f32,
     simulation_aspect_ratio: f32,
+    is_lut_reversed: u32,
 }
 
 // Bind groups
@@ -49,7 +50,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     let uv = textureLoad(t_texture, px_clamped, 0);
     
     // Map the v component (concentration) to LUT index
-    let lut_index = u32(clamp(255.0 * uv.y, 0.0, 255.0));
+    let v = clamp(255.0 * uv.y, 0.0, 255.0);
+    let lut_index = select(u32(v), u32(255.0 - v), uniforms.is_lut_reversed == 1u);
     
     return vec4<f32>(
         f32(lut[lut_index]) / 255.0,
@@ -61,9 +63,8 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
 @fragment
 fn fs_text_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    let alpha = textureSample(t_texture, s_texture, in.tex_coords).r;
-    // Mix between black background (when alpha > 0) and transparent
-    let bg_alpha = min(alpha * 2.0, 0.8);
-    // Mix between white text and background
-    return vec4<f32>(mix(vec3<f32>(0.0), vec3<f32>(1.0), alpha), max(alpha, bg_alpha));
+    let color = textureSample(t_texture, s_texture, in.tex_coords);
+    // color.rgb contains the text/background color
+    // color.a contains the opacity
+    return color;
 } 
