@@ -7,6 +7,8 @@ For more cool patterns in nature, [see here][patterns-in-nature].
 
 ![Example 1][example_1]
 ![Example 2][example_2]
+![Example 3][example_3]
+![Example 4][example_4]
 
 ## Running The Visualizer
 
@@ -18,10 +20,10 @@ You'll need to have Rust and `cargo` installed. Then, run `cargo run --release` 
 - **Right Mouse Button**: Click and drag to interact with the reaction
 - **C**: Clear the screen
 - **N**: Fill the screen with noise
-- **G**: Cycle through different color gradients
-- **P**: Cycle through different reaction presets
-- **U**: Cycle through different nutrient patterns
-- **? or \**: Toggle help overlay
+- **G**: Cycle through different color gradients (hold SHIFT to cycle backwards)
+- **P**: Cycle through different reaction presets (hold SHIFT to cycle backwards)
+- **U**: Cycle through different nutrient patterns (hold SHIFT to cycle backwards)
+- **? or \\**: Toggle help overlay
 - **ESC**: Exit the application
 
 ## Reaction Presets

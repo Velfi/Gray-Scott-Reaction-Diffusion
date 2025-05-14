@@ -1,65 +1,79 @@
-use rand::SeedableRng;
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum NutrientPattern {
+    Uniform = 0,
+    Checkerboard = 1,
+    DiagonalGradient = 2,
+    RadialGradient = 3,
+    VerticalStripes = 4,
+    HorizontalStripes = 5,
+    Noise = 6,
+    WaveFunction = 7,
+    CosineGrid = 8,
+}
 
-pub type NutrientPattern = Box<dyn Fn(usize, usize, usize, usize) -> f32 + Send + Sync>;
+impl NutrientPattern {
+    pub fn as_u32(self) -> u32 {
+        self as u32
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            NutrientPattern::Uniform => "Uniform",
+            NutrientPattern::Checkerboard => "Checkerboard",
+            NutrientPattern::DiagonalGradient => "Diagonal Gradient",
+            NutrientPattern::RadialGradient => "Radial Gradient",
+            NutrientPattern::VerticalStripes => "Vertical Stripes",
+            NutrientPattern::HorizontalStripes => "Horizontal Stripes",
+            NutrientPattern::Noise => "Noise",
+            NutrientPattern::WaveFunction => "Wave Function",
+            NutrientPattern::CosineGrid => "Cosine Grid",
+        }
+    }
+
+    pub fn all() -> Vec<NutrientPattern> {
+        use NutrientPattern::*;
+        vec![
+            Uniform,
+            Checkerboard,
+            DiagonalGradient,
+            RadialGradient,
+            VerticalStripes,
+            HorizontalStripes,
+            Noise,
+            WaveFunction,
+            CosineGrid,
+        ]
+    }
+}
 
 pub fn uniform() -> NutrientPattern {
-    Box::new(|_x, _y, _width, _height| 1.0)
+    NutrientPattern::Uniform
 }
 
 pub fn checkerboard() -> NutrientPattern {
-    Box::new(
-        |x, y, _width, _height| {
-            if (x / 20 + y / 20) % 2 == 0 { 1.0 } else { 0.5 }
-        },
-    )
+    NutrientPattern::Checkerboard
 }
 
 pub fn diagonal_gradient() -> NutrientPattern {
-    Box::new(|x, y, width, height| {
-        let normalized_x = x as f32 / width as f32;
-        let normalized_y = y as f32 / height as f32;
-        (normalized_x + normalized_y) / 2.0
-    })
+    NutrientPattern::DiagonalGradient
 }
 
 pub fn radial_gradient() -> NutrientPattern {
-    Box::new(|x, y, width, height| {
-        let center_x = width as f32 / 2.0;
-        let center_y = height as f32 / 2.0;
-        let dx = x as f32 - center_x;
-        let dy = y as f32 - center_y;
-        let distance = (dx * dx + dy * dy).sqrt();
-        let max_distance = (center_x * center_x + center_y * center_y).sqrt();
-        1.0 - (distance / max_distance)
-    })
+    NutrientPattern::RadialGradient
 }
 
 pub fn vertical_stripes() -> NutrientPattern {
-    Box::new(|x, _y, width, _height| {
-        let stripe_width = width / 10;
-        if (x / stripe_width) % 2 == 0 {
-            1.0
-        } else {
-            0.5
-        }
-    })
+    NutrientPattern::VerticalStripes
 }
 
 pub fn horizontal_stripes() -> NutrientPattern {
-    Box::new(|_x, y, _width, height| {
-        let stripe_height = height / 10;
-        if (y / stripe_height) % 2 == 0 {
-            1.0
-        } else {
-            0.5
-        }
-    })
+    NutrientPattern::HorizontalStripes
 }
 
 pub fn noise() -> NutrientPattern {
-    Box::new(|x, y, _width, _height| {
-        let seed = (x * 73856093) ^ (y * 19349663);
-        let mut rng = rand::rngs::SmallRng::seed_from_u64(seed as u64);
-        rand::Rng::gen_range(&mut rng, 0.5..1.0)
-    })
+    NutrientPattern::Noise
+}
+
+pub fn wave_function() -> NutrientPattern {
+    NutrientPattern::WaveFunction
 }

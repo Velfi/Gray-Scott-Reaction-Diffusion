@@ -810,6 +810,7 @@ dependencies = [
  "fontdue",
  "futures",
  "itertools",
+ "lazy_static",
  "log",
  "noise",
  "pixels",

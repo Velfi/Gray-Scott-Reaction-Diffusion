@@ -12,6 +12,7 @@ struct SimulationParams {
     width: u32,
     height: u32,
     nutrient_pattern: u32, // 0 = uniform, 1 = checkerboard, etc.
+    is_nutrient_pattern_reversed: u32,
 }
 
 #[repr(C)]
@@ -30,6 +31,7 @@ pub struct ReactionDiffusionSystem {
     delta_u: f32,
     delta_v: f32,
     nutrient_pattern: u32,
+    is_nutrient_pattern_reversed: bool,
     uvs: Vec<UVPair>,
 
     // GPU resources
@@ -132,6 +134,7 @@ impl ReactionDiffusionSystem {
             width: width as u32,
             height: height as u32,
             nutrient_pattern: 0, // Start with uniform pattern
+            is_nutrient_pattern_reversed: 0,
         };
 
         let params_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -245,6 +248,7 @@ impl ReactionDiffusionSystem {
             delta_u,
             delta_v,
             nutrient_pattern: 0,
+            is_nutrient_pattern_reversed: false,
             uvs,
             device,
             queue,
@@ -426,6 +430,11 @@ impl ReactionDiffusionSystem {
             width: self.width as u32,
             height: self.height as u32,
             nutrient_pattern: self.nutrient_pattern,
+            is_nutrient_pattern_reversed: if self.is_nutrient_pattern_reversed {
+                1
+            } else {
+                0
+            },
         };
 
         let staging_buffer = self
@@ -449,68 +458,14 @@ impl ReactionDiffusionSystem {
             std::mem::size_of::<SimulationParams>() as u64,
         );
         self.queue.submit(Some(encoder.finish()));
-
-        // Recreate the bind group with the updated params buffer
-        let bind_group_layout =
-            self.device
-                .create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-                    label: Some("Bind Group Layout"),
-                    entries: &[
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 0,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: true },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 1,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Storage { read_only: false },
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                        wgpu::BindGroupLayoutEntry {
-                            binding: 2,
-                            visibility: wgpu::ShaderStages::COMPUTE,
-                            ty: wgpu::BindingType::Buffer {
-                                ty: wgpu::BufferBindingType::Uniform,
-                                has_dynamic_offset: false,
-                                min_binding_size: None,
-                            },
-                            count: None,
-                        },
-                    ],
-                });
-
-        self.bind_groups[self.current_buffer] =
-            self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Bind Group"),
-                layout: &bind_group_layout,
-                entries: &[
-                    wgpu::BindGroupEntry {
-                        binding: 0,
-                        resource: self.uvs_buffers[self.current_buffer].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 1,
-                        resource: self.uvs_buffers[1 - self.current_buffer].as_entire_binding(),
-                    },
-                    wgpu::BindGroupEntry {
-                        binding: 2,
-                        resource: self.params_buffer.as_entire_binding(),
-                    },
-                ],
-            });
     }
 
-    pub fn set_nutrient_pattern(&mut self, pattern_index: u32) {
+    pub fn set_nutrient_pattern(&mut self, pattern_index: u32, is_reversed: bool) {
+        // Update CPU-side state
+        self.nutrient_pattern = pattern_index;
+        self.is_nutrient_pattern_reversed = is_reversed;
+
+        // Update GPU-side state
         let params = SimulationParams {
             feed_rate: self.feed_rate,
             kill_rate: self.kill_rate,
@@ -519,6 +474,7 @@ impl ReactionDiffusionSystem {
             width: self.width as u32,
             height: self.height as u32,
             nutrient_pattern: pattern_index,
+            is_nutrient_pattern_reversed: if is_reversed { 1 } else { 0 },
         };
 
         let staging_buffer = self
@@ -542,5 +498,10 @@ impl ReactionDiffusionSystem {
             std::mem::size_of::<SimulationParams>() as u64,
         );
         self.queue.submit(Some(encoder.finish()));
+    }
+
+    pub fn toggle_nutrient_pattern_reversal(&mut self) {
+        self.is_nutrient_pattern_reversed = !self.is_nutrient_pattern_reversed;
+        self.set_nutrient_pattern(self.nutrient_pattern, self.is_nutrient_pattern_reversed);
     }
 }
