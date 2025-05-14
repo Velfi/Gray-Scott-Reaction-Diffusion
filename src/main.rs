@@ -1,11 +1,12 @@
 use circular_queue::CircularQueue;
 use fontdue::Font;
 use gray_scott_reaction_diffusion::{
-    NutrientPattern, ReactionDiffusionSystem, lut_manager::LutManager, model_presets,
+    LutData, NutrientPattern, ReactionDiffusionSystem, lut_manager::LutManager, model_presets,
     renderer::Renderer,
 };
 use log::error;
-use std::time::Instant;
+use rand::Rng;
+use std::time::{Duration, Instant};
 use winit::dpi::LogicalSize;
 use winit::event::{Event, MouseButton};
 use winit::event_loop::EventLoop;
@@ -24,6 +25,11 @@ fn calculate_window_dimensions(monitor: &winit::monitor::MonitorHandle) -> (u32,
 
     // Use full monitor dimensions
     (logical_size.width as u32, logical_size.height as u32)
+}
+
+// Helper function for linear interpolation of u8 values
+fn lerp_u8(a: u8, b: u8, t: f32) -> u8 {
+    (a as f32 * (1.0 - t) + b as f32 * t).round() as u8
 }
 
 fn main() {
@@ -74,8 +80,19 @@ fn main() {
             .lut_manager
             .load_lut(&available_luts[world.current_lut_index])
         {
+            world.current_lut_data = lut_data.clone();
+            world.source_lut_for_transition = lut_data.clone();
+            world.target_lut_for_transition = lut_data.clone();
+            world.pending_target_lut_index = world.current_lut_index;
             renderer.update_lut(&lut_data);
+        } else {
+            error!(
+                "Failed to load initial LUT: {}",
+                available_luts[world.current_lut_index]
+            );
         }
+    } else {
+        error!("No LUTs available in lut_manager.");
     }
 
     let mut frame_counter = 0;
@@ -128,7 +145,39 @@ fn main() {
             if input.key_pressed(KeyCode::KeyG) {
                 let shift_held =
                     input.key_held(KeyCode::ShiftLeft) || input.key_held(KeyCode::ShiftRight);
-                world.cycle_lut(&mut renderer, shift_held);
+                world.is_psychedelic_mode_active = false;
+                world.is_psychedelic_paused = false;
+                world.is_lut_transitioning = false;
+
+                let available_luts = world.lut_manager.get_available_luts();
+                if !available_luts.is_empty() {
+                    let len = available_luts.len();
+                    let new_lut_index = if shift_held {
+                        if world.current_lut_index == 0 {
+                            len - 1
+                        } else {
+                            world.current_lut_index - 1
+                        }
+                    } else {
+                        (world.current_lut_index + 1) % len
+                    };
+
+                    if let Ok(new_lut_data) =
+                        world.lut_manager.load_lut(&available_luts[new_lut_index])
+                    {
+                        world.current_lut_data = new_lut_data.clone();
+                        world.current_lut_index = new_lut_index;
+                        world.pending_target_lut_index = new_lut_index;
+                        world.source_lut_for_transition = world.current_lut_data.clone();
+                        world.target_lut_for_transition = world.current_lut_data.clone();
+                        renderer.update_lut(&world.current_lut_data);
+                    } else {
+                        error!(
+                            "Failed to instantly load LUT: {}",
+                            available_luts[new_lut_index]
+                        );
+                    }
+                }
             }
             if input.key_pressed(KeyCode::KeyP) {
                 let shift_held =
@@ -152,6 +201,21 @@ fn main() {
                 world
                     .reaction_diffusion_system
                     .toggle_nutrient_pattern_reversal();
+            }
+            if input.key_pressed(KeyCode::KeyZ) {
+                world.is_psychedelic_mode_active = !world.is_psychedelic_mode_active;
+                if world.is_psychedelic_mode_active {
+                    if !world.is_lut_transitioning {
+                        world.initiate_lut_transition(false);
+                    }
+                } else {
+                    if world.is_lut_transitioning {
+                        world.current_lut_data = world.target_lut_for_transition.clone();
+                        world.current_lut_index = world.pending_target_lut_index;
+                        renderer.update_lut(&world.current_lut_data);
+                        world.is_lut_transitioning = false;
+                    }
+                }
             }
 
             // Handle arrow keys for custom preset
@@ -186,6 +250,61 @@ fn main() {
             // Update internal state and request a redraw
             window.request_redraw();
             world.update(&window);
+
+            // LUT transition and animation logic (runs every frame if a transition is active)
+            if world.is_lut_transitioning {
+                let elapsed = world.lut_transition_start_time.elapsed();
+                let progress =
+                    (elapsed.as_secs_f32() / world.lut_transition_duration.as_secs_f32()).min(1.0);
+
+                let mut interpolated_red = vec![0u8; 256];
+                let mut interpolated_green = vec![0u8; 256];
+                let mut interpolated_blue = vec![0u8; 256];
+
+                for i in 0..256 {
+                    interpolated_red[i] = lerp_u8(
+                        world.source_lut_for_transition.red[i],
+                        world.target_lut_for_transition.red[i],
+                        progress,
+                    );
+                    interpolated_green[i] = lerp_u8(
+                        world.source_lut_for_transition.green[i],
+                        world.target_lut_for_transition.green[i],
+                        progress,
+                    );
+                    interpolated_blue[i] = lerp_u8(
+                        world.source_lut_for_transition.blue[i],
+                        world.target_lut_for_transition.blue[i],
+                        progress,
+                    );
+                }
+
+                let interpolated_lut = LutData {
+                    name: world.target_lut_for_transition.name.clone(),
+                    red: interpolated_red,
+                    green: interpolated_green,
+                    blue: interpolated_blue,
+                };
+                renderer.update_lut(&interpolated_lut);
+
+                if progress >= 1.0 {
+                    world.is_lut_transitioning = false;
+                    world.current_lut_data = world.target_lut_for_transition.clone();
+                    world.current_lut_index = world.pending_target_lut_index;
+
+                    if world.is_psychedelic_mode_active {
+                        world.is_psychedelic_paused = true;
+                        world.psychedelic_pause_end_time =
+                            Instant::now() + world.psychedelic_pause_duration;
+                    } else {
+                        world.is_psychedelic_paused = false;
+                    }
+                }
+            } else if world.is_psychedelic_mode_active && world.is_psychedelic_paused {
+                if Instant::now() >= world.psychedelic_pause_end_time {
+                    world.initiate_lut_transition(false);
+                }
+            }
 
             frame_counter += 1;
 
@@ -229,6 +348,17 @@ pub struct World {
     pub current_lut_index: usize,
     pub custom_feed_rate: f32,
     pub custom_kill_rate: f32,
+    pub is_psychedelic_mode_active: bool,
+    pub is_lut_transitioning: bool,
+    pub lut_transition_start_time: Instant,
+    pub lut_transition_duration: Duration,
+    pub current_lut_data: LutData,
+    pub source_lut_for_transition: LutData,
+    pub target_lut_for_transition: LutData,
+    pub pending_target_lut_index: usize,
+    pub psychedelic_pause_duration: Duration,
+    pub psychedelic_pause_end_time: Instant,
+    pub is_psychedelic_paused: bool,
 }
 
 impl World {
@@ -288,6 +418,32 @@ impl World {
             current_lut_index,
             custom_feed_rate: model_presets::CUSTOM.0,
             custom_kill_rate: model_presets::CUSTOM.1,
+            is_psychedelic_mode_active: false,
+            is_lut_transitioning: false,
+            lut_transition_start_time: Instant::now(),
+            lut_transition_duration: Duration::from_secs(5),
+            current_lut_data: LutData {
+                name: "DefaultBlack".to_string(),
+                red: vec![0; 256],
+                green: vec![0; 256],
+                blue: vec![0; 256],
+            },
+            source_lut_for_transition: LutData {
+                name: "DefaultBlack".to_string(),
+                red: vec![0; 256],
+                green: vec![0; 256],
+                blue: vec![0; 256],
+            },
+            target_lut_for_transition: LutData {
+                name: "DefaultBlack".to_string(),
+                red: vec![0; 256],
+                green: vec![0; 256],
+                blue: vec![0; 256],
+            },
+            pending_target_lut_index: current_lut_index,
+            psychedelic_pause_duration: Duration::from_secs(5),
+            psychedelic_pause_end_time: Instant::now(),
+            is_psychedelic_paused: false,
         };
 
         // Fill with initial random noise
@@ -410,7 +566,7 @@ impl World {
         if available_luts.is_empty() {
             "No LUTs available".to_string()
         } else {
-            let mut name = available_luts[self.current_lut_index].clone();
+            let mut name = self.current_lut_data.name.clone();
             if renderer.is_lut_reversed() {
                 name += " (Reversed)";
             }
@@ -529,6 +685,7 @@ P: Cycle through different reaction presets (hold SHIFT to cycle backwards)
 U: Cycle through different nutrient patterns (hold SHIFT to cycle backwards)
 F: Reverse current color gradient
 Y: Reverse current nutrient pattern
+Z: Toggle psychedelic LUT animation
 Arrow Keys: Adjust feed rate (left/right) and kill rate (up/down) in Custom preset (hold SHIFT for finer control)
 ? or \\: Toggle help overlay
 ESC: Exit the application
@@ -575,6 +732,80 @@ Current Nutrient Pattern: {} {}",
             self.custom_kill_rate = (self.custom_kill_rate + kill_delta).clamp(0.0, 0.1);
             self.reaction_diffusion_system
                 .update_rates(self.custom_feed_rate, self.custom_kill_rate);
+        }
+    }
+
+    fn initiate_lut_transition(&mut self, go_reverse: bool) {
+        // If a new transition is initiated while one is ongoing,
+        // snap the current one to its end.
+        if self.is_lut_transitioning {
+            self.current_lut_data = self.target_lut_for_transition.clone();
+            self.current_lut_index = self.pending_target_lut_index;
+        }
+        // When starting any new transition, any active psychedelic pause is cancelled.
+        self.is_psychedelic_paused = false;
+
+        let available_luts = self.lut_manager.get_available_luts();
+        if available_luts.is_empty() {
+            return;
+        }
+        let len = available_luts.len();
+
+        self.source_lut_for_transition = self.current_lut_data.clone();
+
+        let mut new_target_lut_index = self.current_lut_index;
+
+        if go_reverse {
+            // Manual 'G' + Shift (backward)
+            new_target_lut_index = if self.current_lut_index == 0 {
+                len - 1
+            } else {
+                self.current_lut_index - 1
+            };
+        } else {
+            // Forward direction: could be psychedelic mode or manual 'G' (forward)
+            if self.is_psychedelic_mode_active {
+                if len > 1 {
+                    let mut rng = rand::thread_rng();
+                    new_target_lut_index = rng.gen_range(0..len);
+                    // Ensure it's not the same as the current, try once more if it is.
+                    // For a more robust "always different" it might need a loop or different selection strategy
+                    // if very few LUTs are present, but this is generally good.
+                    if new_target_lut_index == self.current_lut_index {
+                        new_target_lut_index = rng.gen_range(0..len); // Try again
+                        // If still the same and len > 1, it might be better to pick next or previous deterministically
+                        // to ensure change, but for many LUTs this is unlikely.
+                        // For simplicity, we accept it might pick same if unlucky on second try with few LUTs.
+                    }
+                } else {
+                    // Only one LUT, or no LUTs (though guarded by available_luts.is_empty() above)
+                    new_target_lut_index = self.current_lut_index; // Stays the same
+                }
+            } else {
+                // Manual 'G' (forward)
+                new_target_lut_index = (self.current_lut_index + 1) % len;
+            }
+        }
+
+        if new_target_lut_index >= len {
+            // Safety check, though logic above should prevent this
+            new_target_lut_index = 0;
+        }
+
+        if let Ok(target_data) = self
+            .lut_manager
+            .load_lut(&available_luts[new_target_lut_index])
+        {
+            self.target_lut_for_transition = target_data;
+            self.pending_target_lut_index = new_target_lut_index;
+            self.is_lut_transitioning = true;
+            self.lut_transition_start_time = Instant::now();
+        } else {
+            error!(
+                "Failed to load LUT for transition: {}",
+                available_luts[new_target_lut_index]
+            );
+            self.is_lut_transitioning = false; // Ensure no transition state if load fails
         }
     }
 }

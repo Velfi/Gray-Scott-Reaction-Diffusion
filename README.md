@@ -19,6 +19,7 @@ You'll need to have Rust and `cargo` installed. Then, run `cargo run --release` 
 
 - **Left Mouse Button**: Click and drag to seed the reaction
 - **Right Mouse Button**: Click and drag to erase/create voids in the reaction
+- **Z**: Toggle psychedelic mode (randomly cycles through LUTs)
 - **X**: Clear the screen
 - **N**: Fill the screen with noise
 - **G**: Cycle through different color gradients (hold SHIFT to cycle backwards)
