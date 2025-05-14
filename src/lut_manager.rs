@@ -122,3 +122,9 @@ impl LutManager {
         })
     }
 }
+
+impl Default for LutManager {
+    fn default() -> Self {
+        Self::new()
+    }
+}

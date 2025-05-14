@@ -208,13 +208,11 @@ fn main() {
                     if !world.is_lut_transitioning {
                         world.initiate_lut_transition(false);
                     }
-                } else {
-                    if world.is_lut_transitioning {
-                        world.current_lut_data = world.target_lut_for_transition.clone();
-                        world.current_lut_index = world.pending_target_lut_index;
-                        renderer.update_lut(&world.current_lut_data);
-                        world.is_lut_transitioning = false;
-                    }
+                } else if world.is_lut_transitioning {
+                    world.current_lut_data = world.target_lut_for_transition.clone();
+                    world.current_lut_index = world.pending_target_lut_index;
+                    renderer.update_lut(&world.current_lut_data);
+                    world.is_lut_transitioning = false;
                 }
             }
 
@@ -300,10 +298,11 @@ fn main() {
                         world.is_psychedelic_paused = false;
                     }
                 }
-            } else if world.is_psychedelic_mode_active && world.is_psychedelic_paused {
-                if Instant::now() >= world.psychedelic_pause_end_time {
-                    world.initiate_lut_transition(false);
-                }
+            } else if world.is_psychedelic_mode_active
+                && world.is_psychedelic_paused
+                && Instant::now() >= world.psychedelic_pause_end_time
+            {
+                world.initiate_lut_transition(false);
             }
 
             frame_counter += 1;
@@ -538,29 +537,6 @@ impl World {
         );
     }
 
-    fn cycle_lut(&mut self, renderer: &mut Renderer, reverse: bool) {
-        let available_luts = self.lut_manager.get_available_luts();
-        if !available_luts.is_empty() {
-            let len = available_luts.len();
-            if reverse {
-                self.current_lut_index = if self.current_lut_index == 0 {
-                    len - 1
-                } else {
-                    self.current_lut_index - 1
-                };
-            } else {
-                self.current_lut_index = (self.current_lut_index + 1) % len;
-            }
-
-            if let Ok(lut_data) = self
-                .lut_manager
-                .load_lut(&available_luts[self.current_lut_index])
-            {
-                renderer.update_lut(&lut_data);
-            }
-        }
-    }
-
     fn get_current_lut_name(&self, renderer: &Renderer) -> String {
         let available_luts = self.lut_manager.get_available_luts();
         if available_luts.is_empty() {
@@ -753,7 +729,7 @@ Current Nutrient Pattern: {} {}",
 
         self.source_lut_for_transition = self.current_lut_data.clone();
 
-        let mut new_target_lut_index = self.current_lut_index;
+        let mut new_target_lut_index;
 
         if go_reverse {
             // Manual 'G' + Shift (backward)

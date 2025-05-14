@@ -523,14 +523,15 @@ impl Renderer {
 
                         if dst_y < texture_height as usize && dst_x < texture_width as usize {
                             let dst_idx = (dst_y * texture_width as usize + dst_x) * 4;
-                            if dst_idx + 3 < text_bitmap.len() && src_idx < bitmap.len() {
-                                if bitmap[src_idx] > 0 {
-                                    // White text (255,255,255) with alpha from the font rasterizer
-                                    text_bitmap[dst_idx] = 255; // R = 255
-                                    text_bitmap[dst_idx + 1] = 255; // G = 255
-                                    text_bitmap[dst_idx + 2] = 255; // B = 255
-                                    text_bitmap[dst_idx + 3] = bitmap[src_idx]; // A from font
-                                }
+                            if dst_idx + 3 < text_bitmap.len()
+                                && src_idx < bitmap.len()
+                                && bitmap[src_idx] > 0
+                            {
+                                // White text (255,255,255) with alpha from the font rasterizer
+                                text_bitmap[dst_idx] = 255; // R = 255
+                                text_bitmap[dst_idx + 1] = 255; // G = 255
+                                text_bitmap[dst_idx + 2] = 255; // B = 255
+                                text_bitmap[dst_idx + 3] = bitmap[src_idx]; // A from font
                             }
                         }
                     }
